@@ -9,8 +9,7 @@
     "test:whale": "npm --prefix packages/dsh-qq-whale test",
     "test:vault": "npm --prefix packages/dsh-qq-vault test",
     "verify:live": "node scripts/verify-live.mjs",
-    "push:all": "bash scripts/push-all.sh",
-    "patch:qqbot": "node scripts/patch-qqbot.mjs"
+    "push:all": "bash scripts/push-all.sh"
   },
   "engines": {
     "node": ">=22.6"

@@ -338,18 +338,13 @@ dsh-qq-vault ──> 独立（读写 profile 配置、记忆库；不依赖 whal
 `dsh-qq-bot` 的 `engines.dsh` 无上界 → 升到 0.3 不会被拦，但很可能坏（深用 `sessionController` / `tools.guard` / `settings.configure` / `webServer.register`）。
 升级前：备份 `cordis.patch.yml`。
 
-**升级 dsh-qq-bot 之后必须重打一个补丁**（脚本化，不是手工改）：
+**当前没有任何 node_modules 补丁。** 2026-11-14 曾给 `turn-runtime.js` 打过「模型不说话时不发占位提示」的补丁，
+用户明确否决了打补丁这种方式（「我不希望通过补丁去调整」），已完整还原（与上游 `diff` 一致），补丁脚本一并从仓库删除。
 
-```bash
-node scripts/patch-qqbot.mjs            # 先看会改什么（dry-run）
-node scripts/patch-qqbot.mjs --write    # 打补丁
-# 然后重载插件（plugin_manager set_bundle 关→开）或重启容器
-node scripts/patch-qqbot.mjs --revert --write   # 需要还原时
-```
-
-补丁内容：`gateway/turn-runtime.js` 里「模型没产出文字就发一句（本轮没有产生文字回复：…）」改成**只在 turn/end 带 error 时才发**——正常结束但没文字 = 模型选择不说，静默跳过（用户 2026-11-14 决定）。
-
-脚本是幂等的；上游版本变了会因锚点匹配失败而**明确报错**，不会静默跳过。
+> 空回复提示的现状：那句「（本轮没有产生文字回复：…）」是 `gateway/turn-runtime.js:505` 的**硬编码字面量**，
+> 插件没有任何配置项能关掉它（`settings-core-set.json` 里无相关键，npm 上最新版即 0.14.0）。
+> 实测 14 个回合的 `turn/end` 全是正常结束（只有 `kind`、无 `error`），所以它只在「模型真的一个字都不说」时才会出现。
+> 要彻底去掉只能走上游（提 issue / PR 加一个开关），不要在本机改 node_modules。
 
 ---
 

@@ -4,6 +4,18 @@
 > 每次改动都要记一笔——**半年后你会想知道当时为什么这么改**。
 > 版本号是**双轨**的（项目本体 + 插件包），规则见 CONTRIBUTING §6。
 
+## [1.26.0] - 2026-11-14（撤回补丁方案）
+
+### Removed
+- 删除 `scripts/patch-qqbot.mjs` 与 npm 脚本 `patch:qqbot`：用户明确否决「通过补丁调整第三方包」这种方式
+- `node_modules/@sputnikzaychik/dsh-qq-bot/lib/gateway/turn-runtime.js` 已完整还原（与打补丁前 diff 一致）
+
+### Findings（记下来免得再查一遍）
+- 「（本轮没有产生文字回复：…）」是 `turn-runtime.js:505` 的硬编码字面量，**插件无任何配置项可关闭**
+- `settings-core-set.json` 里无相关键；npm 最新版即 0.14.0，无更新版本可升
+- 实测该会话 14 个 `turn/end` 全是正常结束（reason 只有 `kind`、无 `error`）→ 该提示只在模型一个字都不说时出现
+- 结论：要彻底去掉只能走上游（issue/PR 加开关），本机不做 node_modules 改动
+
 ## [1.25.0] - 2026-11-14（按用户意愿调回：少干预、多能力）
 
 > 三条「减少替模型做决定」，两条「把能力放开」。
