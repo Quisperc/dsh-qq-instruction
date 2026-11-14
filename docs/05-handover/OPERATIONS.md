@@ -262,7 +262,7 @@ cd /tmp && dsh --profile web --dump-config > /dev/null; echo $?      # 改之前
 | 顺序 | 手段 | 说明 |
 |---|---|---|
 | 1 | 把群从 `group.allow` 移除 | 最干净：它不再处理该群任何消息 |
-| 2 | 关掉主动发言 | 当前 `proactive.enabled=true` 但 `dryRun=true`（只演练不外发），本身不会刷屏；真要停就把 `enabled` 改 false |
+| 2 | 关掉主动发言 | 2026-11-14 起**已真开**（`enabled=true` + `dryRun=false`）。要停就把 `enabled` 改 false；只想观察就改回 `dryRun: true`（注意：那样每轮仍会调模型，白烧 token） |
 | 3 | 停止驱动 | 停容器（面板）或断开 NapCat；**注意同一 QQ 号不能同时挂两个 WS 客户端** |
 | 4 | `/静音` 类群管理指令 | **当前不可用**：`admin.enabled=false`，插件对该分组的查询与动作一律拒绝（`lib/tools/index.js:441`）。要用先开 admin |
 
@@ -274,7 +274,7 @@ cd /tmp && dsh --profile web --dump-config > /dev/null; echo $?      # 改之前
 |---|---|
 | 模型 | 走 `leaflow/deepseek-v4.1-flash-1017`；要换在 `llm-pi-ai` 的 providers 里加模型再切 |
 | 识图 | qq-bot **0.14.0 原生附件**：`vision.provider`/`vision.model` 都留空 → 图片作为附件随消息进会话，会话模型直接看，**不再多调一次视觉模型**，也不需要 `read_image` 绕路 |
-| 主动发言 | 当前 `dryRun=true` 只演练；真开启会显著放大成本（一直在读群、一直在判断） |
+| 主动发言 | 2026-11-14 起真开（`dryRun=false`），闸门：60 分钟判断一次、每小时≤2、每日≤8、23:00-08:00 静默、间隔≥15 分钟、≥6 条新消息才判断、`eventGuard` 开、120 字上限 |
 | 频率闸 | `maxPerHour: 2` / `maxPerDay: 8` / `minGapMinutes: 15`（`proactive` 分组） |
 | 预算闸 | 给 API Key 设月度上限（服务商控制台），这是唯一硬上限 |
 | TTS/STT | **尚未实现**（qq-bot v0.14.0 无 tts/stt 配置组），暂不产生语音成本 |
@@ -300,7 +300,8 @@ cd /tmp && dsh --profile web --dump-config > /dev/null; echo $?      # 改之前
 | **生图** | ❌ 不通 | 缺 key（`DASHSCOPE_API_KEY` 未注入）+ 端点不兼容（插件只拼 `<baseUrl>/images/generations`，DashScope 该路径 404） |
 | **TTS** | ❌ 未实现 | 需新写工具（100–200 行）+ 出站 record 段 + 音频需公网可访问 URL（NapCat 在远端读不到本地文件） |
 | **STT** | ❌ 未实现 | 需 `get_record` 取音频 → VAD → ASR → 注入；工作量大于 TTS |
-| 主动发言 | ⚠️ 仅演练 | 把 `dryRun` 改 false 才会真发 |
+| 主动发言 | ✅ 已真开 |
+| 气泡拆分 | ✅ 默认开（≤80 字/段、最多 3 段）；2026-11-14 调成 0.6–2.2 秒间隔（原默认 0–5 秒，第二句可能隔 5 秒才来） | 想静音：`enabled: false`；想只观察：把 `dryRun` 改回 true（会持续烧 token） |
 | 群管理 | ❌ 整体关 | `admin.enabled=false` |
 
 **建议顺序**：先补 key 打通生图（改动最小）→ 再 TTS（先趟音频托管）→ 最后 STT。
