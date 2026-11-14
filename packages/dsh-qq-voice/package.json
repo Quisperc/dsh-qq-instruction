@@ -1,0 +1,96 @@
+{
+  "name": "dsh-qq-voice",
+  "version": "0.1.0",
+  "description": "给 QQBot 加语音回复：qq_voice 工具把文字合成语音，走自己的只发不收 OneBot 连接发出 record 段。",
+  "icon": "icon.svg",
+  "author": "civer",
+  "type": "module",
+  "main": "lib/index.js",
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  },
+  "exports": {
+    ".": "./lib/index.js",
+    "./package.json": "./package.json",
+    "./tts": "./lib/tts.js",
+    "./sender": "./lib/sender.js",
+    "./guard": "./lib/guard.js",
+    "./client": {
+      "default": "./lib/client/settings.js"
+    },
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "lib",
+    "CHANGELOG.md",
+    "cordis.patch.yml",
+    "icon.svg",
+    "LICENSE",
+    "locale",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=22.6",
+    "dsh": ">=0.2.0-rc.2"
+  },
+  "dsh": {
+    "runtime": "host",
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "compatibility": {
+      "dsh": ">=0.2.0-rc.2 <0.3.0"
+    },
+    "catalog": {
+      "category": "qq",
+      "summary": {
+        "en": "Voice replies for QQ bots: a qq_voice tool that synthesizes speech and sends a record segment over its own send-only OneBot connection.",
+        "zh": "给 QQBot 加语音回复：qq_voice 工具把文字合成语音，走自己的只发不收 OneBot 连接发出 record 段。"
+      },
+      "capabilities": [
+        "tts",
+        "qq",
+        "tool"
+      ]
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-settings"
+      ]
+    }
+  },
+  "meta": {
+    "title": "QQ 语音回复（TTS）",
+    "description": "装上即多一个 qq_voice 工具；设置页可配开关、音色、节流与可用范围。默认关闭。"
+  },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "qq",
+    "onebot",
+    "napcat",
+    "tts",
+    "voice",
+    "dashscope",
+    "qwen-tts"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Quisperc/dsh-qq-instruction.git",
+    "directory": "packages/dsh-qq-voice"
+  },
+  "homepage": "https://github.com/Quisperc/dsh-qq-instruction/tree/main/packages/dsh-qq-voice",
+  "bugs": {
+    "url": "https://github.com/Quisperc/dsh-qq-instruction/issues"
+  },
+  "license": "MIT",
+  "peerDependencies": {
+    "@deepseek-ai/schemastery": "^3.18.5"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/schemastery": {
+      "optional": true
+    }
+  }
+}

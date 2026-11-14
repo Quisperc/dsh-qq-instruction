@@ -4,6 +4,23 @@
 > 每次改动都要记一笔——**半年后你会想知道当时为什么这么改**。
 > 版本号是**双轨**的（项目本体 + 插件包），规则见 CONTRIBUTING §6。
 
+## [1.29.0] - 2026-11-15（新增 dsh-qq-voice：语音回复）
+
+### Added
+- **新插件 `dsh-qq-voice` v0.1.0**：给 QQ 会话加语音回复（TTS）。71 项测试全过。
+  - 自己连一条 OneBot WS，**只发不收**（qq-bot 出站不支持 record、也不提供任何 Cordis 服务）
+  - 实测 `record` + `base64://` **WAV 直发可用**，不需要 silk/ffmpeg
+  - DashScope TTS（默认 `qwen-audio-3.1-tts-flash`），走**原生端点**而非 compatible-mode
+  - 权限与节流在插件自身：owner 判定（解析消息头「身份:拥有者」）+ 群白名单 + 每小时 6 条 + 10 秒冷却；**解析不到身份就拒绝**
+  - 默认关闭（没 key 时开了只会报错）；
+- whale 白名单 24 → **25 项**（加 `qq_voice`，否则 hide 模式下模型看不见它）
+- 语音引擎选型结论记入 OPERATIONS：DashScope TTS 必须原生端点；`qwen-audio-3.1-flash` 是系列名，合成要用 `-tts-flash`
+
+### Known limitations
+- DashScope 请求体字段待在拿到 key 后首次真机校验（插件内置 `requestTemplate` 可覆盖，不改代码）
+- `mode: always`（每次回复自动附语音）未实现，当前等同 manual
+- STT 未做：qq-bot 把入站 record 丢成 `[语音]`，拿不到音频 URL
+
 ## [1.28.0] - 2026-11-15（新增功能规范 + 发现页完善）
 
 ### Added

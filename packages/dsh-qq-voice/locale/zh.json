@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "QQ 语音回复（TTS）",
+    "description": "装上即多一个 qq_voice 工具：把文字合成语音，用自己的只发不收 OneBot 连接发出 record 段。默认关闭。"
+  }
+}

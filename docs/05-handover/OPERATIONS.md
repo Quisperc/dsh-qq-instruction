@@ -298,6 +298,10 @@ cd /tmp && dsh --profile web --dump-config > /dev/null; echo $?      # 改之前
 | 群历史、图片反搜 | ✅ 可用 | — |
 | **识图** | ✅ 可用（qq-bot 0.14.0 原生附件；两项留空即走这条路） | 若把 `vision.provider/model` 任填一项，会退回「先描述再并入」，反而多一次调用 |
 | **生图** | ✅ 已打通（2026-11-14 深夜） | 火山方舟 Seedream 4.0。参数：`baseUrl=https://ark.cn-beijing.volces.com/api/v3`、`model=doubao-seedream-4-0-20260415`、`size=1024x1024`、`enabled=true`，key 存在 `imageGen.apiKey`（600 权限 profile，已 gitignore） |
+| **TTS（语音回复）** | ✅ 发送链路已实测（2026-11-15） | 独立插件 `dsh-qq-voice`：自己连一条**只发不收**的 WS，发 `record` 段。实测 `WAV` 直发可用（**不需要 silk/ffmpeg**）。DashScope TTS 待用户提供 key（`qwen-audio-3.1-tts-flash`）。默认关闭 |
+| **STT（听语音）** | ⛔ 卡在 qq-bot | 官方 `speech-to-text` + SenseVoice 服务已在本机可用，但 qq-bot 把入站 `record` 丢成 `[语音]`、拿不到音频 URL。要么上游改约 10 行，要么 NapCat 侧做 |
+
+> **语音插件三条要点**：① 它**不经过 qq-bot**（qq-bot 出站不支持 record，也不提供服务）；② 第二条 WS **只发不收**，绝不响应事件，所以不会双回复；③ 权限（owner 判定 + 群白名单 + 每小时 6 条节流）都在插件自身，解析不到发言人身份就**保守拒绝**。
 
 **生图要点（换厂商/换模型时看这里）**
 

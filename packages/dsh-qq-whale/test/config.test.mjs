@@ -68,9 +68,9 @@ test('删掉的字段不存在：enabled / hideFromModel / presetId 都不再是
   assert.deepEqual(cfg, { mode: 'hide', allowTools: DEFAULT_ALLOW });
 });
 
-test('白名单是 24 项，且刻意不含通用的 web_search / web_fetch', () => {
-  assert.equal(DEFAULT_ALLOW.length, 24);
-  assert.equal(new Set(DEFAULT_ALLOW).size, 24, '不能有重复项');
+test('白名单是 25 项，且刻意不含通用的 web_search / web_fetch', () => {
+  assert.equal(DEFAULT_ALLOW.length, 25);
+  assert.equal(new Set(DEFAULT_ALLOW).size, 25, '不能有重复项');
   // 联网由 qq_websearch / qq_webfetch 负责，通用版重复且更弱
   assert.equal(DEFAULT_ALLOW.includes('web_search'), false);
   assert.equal(DEFAULT_ALLOW.includes('web_fetch'), false);
@@ -80,6 +80,8 @@ test('白名单是 24 项，且刻意不含通用的 web_search / web_fetch', ()
   assert.ok(DEFAULT_ALLOW.includes('read_image'));
   // 表情包：用户 2026-11-14 要求开启存与偷，工具必须可见
   assert.ok(DEFAULT_ALLOW.includes('qq_sticker'));
+  // 语音：TTS 工具必须可见（2026-11-15）
+  assert.ok(DEFAULT_ALLOW.includes('qq_voice'));
   // 危险能力不该出现
   for (const dangerous of ['bash', 'subagent', 'workflow', 'terminal_open']) {
     assert.equal(DEFAULT_ALLOW.includes(dangerous), false, `${dangerous} 不该在白名单里`);

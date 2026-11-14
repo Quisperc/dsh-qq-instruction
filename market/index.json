@@ -65,12 +65,59 @@
       "versions": [
         {
           "version": "0.5.0",
-          "publishTimestamp": 1794650885,
+          "publishTimestamp": 1794678084,
           "source": {
             "type": "git",
             "url": "https://github.com/Quisperc/dsh-qq-instruction",
-            "commit": "9857c8038326522cabab7be88dc79d19f34e7913",
+            "commit": "8f43e429d71b03e2fd6403f8ce62ac95d2e0b035",
             "path": "packages/dsh-qq-vault"
+          },
+          "engines": {
+            "dsh": ">=0.2.0-rc.2 <0.3.0"
+          }
+        }
+      ]
+    },
+    {
+      "name": "dsh-qq-voice",
+      "title": {
+        "en": "QQ voice replies (TTS)",
+        "zh": "QQ 语音回复（TTS）"
+      },
+      "description": {
+        "en": "Adds a qq_voice tool that synthesizes speech and sends a record segment over its own send-only OneBot connection. Off by default.",
+        "zh": "装上即多一个 qq_voice 工具：把文字合成语音，用自己的只发不收 OneBot 连接发出 record 段。默认关闭。"
+      },
+      "icon": "../packages/dsh-qq-voice/icon.svg",
+      "author": "civer",
+      "homepage": "https://github.com/Quisperc/dsh-qq-instruction",
+      "repository": {
+        "url": "https://github.com/Quisperc/dsh-qq-instruction",
+        "directory": "packages/dsh-qq-voice"
+      },
+      "metadata": {
+        "category": "qq",
+        "keywords": [
+          "dsh",
+          "dsh-plugin",
+          "qq",
+          "onebot",
+          "napcat",
+          "tts",
+          "voice",
+          "dashscope",
+          "qwen-tts"
+        ]
+      },
+      "versions": [
+        {
+          "version": "0.1.0",
+          "publishTimestamp": 1794678084,
+          "source": {
+            "type": "git",
+            "url": "https://github.com/Quisperc/dsh-qq-instruction",
+            "commit": "8f43e429d71b03e2fd6403f8ce62ac95d2e0b035",
+            "path": "packages/dsh-qq-voice"
           },
           "engines": {
             "dsh": ">=0.2.0-rc.2 <0.3.0"
@@ -112,11 +159,11 @@
       "versions": [
         {
           "version": "0.14.0",
-          "publishTimestamp": 1794650885,
+          "publishTimestamp": 1794678084,
           "source": {
             "type": "git",
             "url": "https://github.com/Quisperc/dsh-qq-instruction",
-            "commit": "9857c8038326522cabab7be88dc79d19f34e7913",
+            "commit": "8f43e429d71b03e2fd6403f8ce62ac95d2e0b035",
             "path": "packages/dsh-qq-whale"
           },
           "engines": {

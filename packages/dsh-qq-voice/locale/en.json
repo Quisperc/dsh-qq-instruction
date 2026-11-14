@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "QQ voice replies (TTS)",
+    "description": "Adds a qq_voice tool that synthesizes speech and sends a record segment over its own send-only OneBot connection. Off by default."
+  }
+}
