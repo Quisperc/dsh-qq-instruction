@@ -278,6 +278,42 @@ if (!Number.isInteger(timestamp) || timestamp <= 0) fail(`--timestamp 必须是�
 const outFile = path.resolve(REPO_ROOT, typeof args.out === 'string' ? args.out : DEFAULT_OUT);
 const packages = collectPackages();
 
+/**
+ * 读已有索引里每个插件的历史版本，供 mergePreviousVersions 保留。
+ *
+ * 为什么需要：市场里「装哪个版本」是按索引里的 versions 列表给的。若每次发版都只写当前版本，
+ * 用户就回不到上一版（回滚只能手工拼 git spec）。旧索引损坏时按空处理，不让它阻塞发版。
+ * @returns {Map<string, unknown[]>} 包名 → 该包已有的版本条目（原样保留）
+ */
+function readPreviousVersions(file) {
+  /** @type {Map<string, unknown[]>} */
+  const map = new Map();
+  if (!fs.existsSync(file)) return map;
+  try {
+    const doc = JSON.parse(fs.readFileSync(file, 'utf8'));
+    for (const plugin of Array.isArray(doc?.plugins) ? doc.plugins : []) {
+      if (typeof plugin?.name !== 'string' || !Array.isArray(plugin.versions)) continue;
+      map.set(plugin.name, plugin.versions);
+    }
+  } catch {
+    // 旧索引读不动就当没有：宁可少保留历史，也不要卡住发版
+  }
+  return map;
+}
+
+/**
+ * 把当前版本并入历史版本列表：同名版本以本次为准（重新发同一版会刷新 commit），其余原样保留。
+ * @param {Record<string, unknown>} fresh 本次生成的插件条目
+ * @param {Map<string, unknown[]>} previous 旧索引里的版本
+ * @returns {Record<string, unknown>} 合并后的插件条目
+ */
+function mergePreviousVersions(fresh, previous) {
+  const kept = (previous.get(fresh.name) ?? []).filter((entry) => entry?.version !== fresh.versions[0]?.version);
+  return { ...fresh, versions: [...fresh.versions, ...kept] };
+}
+
+const previousVersions = readPreviousVersions(path.resolve(REPO_ROOT, typeof args.out === 'string' ? args.out : DEFAULT_OUT));
+
 const index = {
   format: 1,
   title: INDEX_TITLE,
@@ -287,7 +323,10 @@ const index = {
     labels: LABEL_DECLARATIONS,
     sortKeys: {},
   },
-  plugins: packages.map((entry) => pluginEntry(entry, { repo, commit, timestamp, outFile })),
+  plugins: packages.map((entry) => mergePreviousVersions(
+    pluginEntry(entry, { repo, commit, timestamp, outFile }),
+    previousVersions,
+  )),
 };
 
 // 校验时用的索引 URL：真实托管位置无法预知，用一个和图标同源的 https 地址即可
