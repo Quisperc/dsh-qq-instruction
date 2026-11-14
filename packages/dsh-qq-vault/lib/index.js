@@ -439,6 +439,7 @@ export function apply(ctx, rawConfig) {
           config: 'dsh-qq-bot 段的各个一级配置项（token / QQ 号 / 群号在各自项里）',
           memory: 'QQ_msg/.dsh-meow/memory.db',
           whaleConfig: 'dsh-qq-whale 段的各个一级配置项',
+          voiceConfig: 'dsh-qq-voice 段的各个一级配置项（含 TTS key / NapCat token / 复刻音色 id）',
         },
         backupDir: paths.backupDir,
         upload: { supported: uploadSupported, path: `/api${ROUTE_PREFIX}/upload` },

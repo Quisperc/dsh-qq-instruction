@@ -83,6 +83,47 @@ window.__ModuleLoader__.load({
         .filter(function (line) { return line !== ''; });
     }
 
+    /**
+     * 音色目录 ⇄ 文本互转。
+     *
+     * 为什么用「名字 | id | 说明」这种土格式而不是 JSON：这个卡片是给人在手机浏览器上改的，
+     * 少一个字段写错的括号就少一次保存失败。只写一个值时当成 id（名字默认等于 id）。
+     */
+    function voicesToLines(list) {
+      try {
+        if (!Array.isArray(list)) return '';
+        return list.map(function (entry) {
+          if (entry === null || typeof entry !== 'object') return '';
+          var label = String(entry.label === undefined || entry.label === null ? '' : entry.label);
+          var id = String(entry.id === undefined || entry.id === null ? '' : entry.id);
+          var note = String(entry.note === undefined || entry.note === null ? '' : entry.note);
+          if (id === '' && label === '') return '';
+          // 名字与 id 相同时只写 id，界面更短
+          var head = label === '' || label === id ? id : label;
+          return note === '' ? head + ' | ' + id : head + ' | ' + id + ' | ' + note;
+        }).filter(function (line) { return line !== ''; }).join('\n');
+      } catch (error) {
+        return '';
+      }
+    }
+
+    function linesToVoices(text) {
+      var out = [];
+      String(text === undefined || text === null ? '' : text).split('\n').forEach(function (line) {
+        var raw = line.trim();
+        if (raw === '') return;
+        var seg = raw.split('|').map(function (part) { return part.trim(); });
+        var label = seg[0] === undefined ? '' : seg[0];
+        var id = seg[1] === undefined ? '' : seg[1];
+        var note = seg[2] === undefined ? '' : seg[2];
+        // 只写了一个值：把它当 id，名字跟着 id
+        if (id === '') { id = label; label = ''; }
+        if (id === '') return;
+        out.push({ id: id, label: label === '' ? id : label, note: note });
+      });
+      return out;
+    }
+
     function ReadOnly(props) {
       return h('div', { style: styles.card }, h('div', { style: styles.note }, props.reason || FALLBACK_TEXT));
     }
@@ -96,14 +137,17 @@ window.__ModuleLoader__.load({
       { key: 'enabled', label: '启用', type: 'bool', hint: '默认关；没填 API key 时开着只会每次报错' },
       { key: 'mode', label: '模式', type: 'select', options: [['manual', 'manual —— 模型显式调用才发'], ['off', 'off —— 不注册工具'], ['always', 'always —— 预留（当前等同 manual）']] },
 
-      { group: 'TTS（DashScope）' },
+      { group: 'TTS（模型可自己选音色与种子）' },
       { key: 'ttsModel', label: '模型', type: 'text', hint: '如 qwen3-tts-flash' },
-      { key: 'ttsVoice', label: '音色', type: 'text', hint: '留空 = 用模型默认；可选值见 DashScope 文档' },
+      { key: 'ttsVoice', label: '默认音色', type: 'text', hint: '留空 = 用服务端默认；模型可用工具参数覆盖' },
+      { key: 'voices', label: '可选音色目录', type: 'area', hint: '每行一个：名字 | 音色id | 说明（说明可省）。列在这里，模型才知道能挑哪些' },
+      { key: 'seedMode', label: 'seed 策略', type: 'select', options: [['model', 'model —— 模型决定，没传则随机'], ['fixed', 'fixed —— 固定用下面的种子'], ['random', 'random —— 每次随机']] },
+      { key: 'defaultSeed', label: '默认种子', type: 'number', hint: 'fixed 模式使用；0 ≤ seed < 2^31' },
       { key: 'apiKey', label: 'API key', type: 'secret', hint: '留空 = 不修改；也可只配下面的环境变量名' },
       { key: 'apiKeyEnv', label: 'key 环境变量', type: 'text', hint: '默认 DASHSCOPE_API_KEY' },
       { key: 'ttsBaseUrl', label: '端点', type: 'text', hint: '原生端点，不是 compatible-mode' },
       { key: 'format', label: '格式', type: 'text', hint: 'wav / mp3；拿到什么发什么' },
-      { key: 'requestTemplate', label: '请求体模板', type: 'area', hint: '可选。留空 = 内置形状；支持 {{text}}/{{model}}/{{voice}}/{{format}}' },
+      { key: 'requestTemplate', label: '请求体模板', type: 'area', hint: '可选。留空 = 内置形状；支持 {{text}}/{{model}}/{{voice}}/{{format}}/{{seed}}/{{instruction}}（seed 不要加引号）' },
 
       { group: 'NapCat 连接（本插件自己连一条，只发不收）' },
       { key: 'wsUrl', label: 'WS 地址', type: 'text', hint: '与 qq-bot 同一个即可；NapCat 允许多客户端' },
@@ -168,6 +212,8 @@ window.__ModuleLoader__.load({
         var raw = value[field.key];
         if (field.type === 'bool') return raw === true;
         if (field.type === 'area' && field.key === 'allowGroups') return linesOf(raw);
+        if (field.type === 'area' && field.key === 'voices') return voicesToLines(raw);
+        if (field.type === 'select' && field.key === 'seedMode') return raw === undefined || raw === null ? 'model' : String(raw);
         if (raw === undefined || raw === null) return '';
         return String(raw);
       }
@@ -192,6 +238,7 @@ window.__ModuleLoader__.load({
           var next = draft[key];
           if (field.type === 'secret' && (next === '' || next === undefined)) return; // 留空 = 不修改
           if (field.key === 'allowGroups') { ops.push({ op: 'set', path: [key], value: listOf(next) }); return; }
+          if (field.key === 'voices') { ops.push({ op: 'set', path: [key], value: linesToVoices(next) }); return; }
           if (field.type === 'number') { ops.push({ op: 'set', path: [key], value: Number(next) }); return; }
           ops.push({ op: 'set', path: [key], value: next });
         });
@@ -228,10 +275,13 @@ window.__ModuleLoader__.load({
       }
 
       var children = [];
+      var voiceCount = Array.isArray(value.voices) ? value.voices.length : 0;
       children.push(h('div', { key: 'summary', style: styles.note },
         '当前：' + (value.enabled === true ? '已启用' : '未启用') +
         '；模式 ' + String(value.mode || 'manual') +
         '；模型 ' + String(value.ttsModel || '(未填)') +
+        '；音色 ' + (voiceCount > 0 ? String(voiceCount) + ' 个可选' : (value.ttsVoice ? '默认一个' : '服务端默认')) +
+        '；seed ' + String(value.seedMode || 'model') +
         '；每小时 ' + String(value.maxPerHour === undefined ? 6 : value.maxPerHour) + ' 条。'));
 
       FIELDS.forEach(function (field, index) {

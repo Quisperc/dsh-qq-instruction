@@ -3,7 +3,7 @@
 给 QQBot 加**语音回复**：多一个 `qq_voice` 工具，模型觉得该用语音说话时，把文字交给 TTS 合成音频，
 再把音频以 `record` 段发到当前 QQ 会话。
 
-> 版本 **0.1.0** · 81 项测试（含元信息/客户端契约）· 发送链路真机验证过（`retcode 0`）
+> 版本 **0.1.0** · 108 项测试（含元信息/客户端契约/参数矩阵）· 发送链路真机验证过（`retcode 0`）
 >
 > **一条不能忘的平台事实**：`dsh-qq-bot` 的入站会把 `record` 丢成 `[语音]`（音频 URL 丢失），
 > 出站适配器虽然支持 `record` 段，但**没有对外的发送入口**（无路由、无服务、工具只发 text/image）。
@@ -35,8 +35,41 @@
 ```text
 （群里，非拥有者 @ 机器人）
 你：  发条语音
-鱼：  qq_voice 拒绝：「这个工具只给拥有者用」——不烧你的额度，也不替你说话
+鱼：  qq_voice 拒绝：「这个工具只给拥有者用」——不烧你的额度，也不替你说话。
 ```
+
+### 1.1.1 语音参数也可以由模型自己决定
+
+工具参数（都能留空，留空就走配置默认）：
+
+| 参数 | 类型 | 说明 |
+|---|---|---|
+| `text` | string（必填） | 要念的文字 |
+| `voice` | string | 音色 **id 或名字**。配了 `voices` 目录时只认目录里的；没配则透传 |
+| `seed` | number | `0 ≤ seed < 2^31`。同一个音色换 seed 会换语气与节奏 |
+| `style` | string | 自然语言语气说明（如「慢一点、压低声音」），作为 `instruction` 透传 |
+| `message_type` / `target_id` | string | 发到哪（默认当前会话） |
+
+**为什么要让它自己决定**：同一个音色 + 同一段文字，换 seed 的听感差别很大（停顿、轻重）。
+把这三项开给模型，它才能「这句温柔点、那句急一点」，而不是每条都一个调。
+
+```text
+你：  凶一点说：你怎么又迟到
+鱼：  qq_voice(text="你怎么又迟到", style="语气凶一点、语速快", seed=9137)
+      → 结果里回报 voice=… / seed=9137 / seedSource=model
+```
+
+**目录里没写名字的坑**：`voices` 非空时，模型传一个目录外的 id 会被**明确拒绝**并列出可选项
+（不然就是一次服务端 400，模型还看不懂为什么）。留空 `voices` 则不做校验。
+
+**目录怎么填**（设置页「可选音色目录」，一行一个）：
+
+```text
+龙灵安希 | qwen-audio-3.0-tts-flash-longlinx-efc30de0… | 偏御姐、语速偏慢
+Cherry
+```
+
+只写一个值时按 **id** 处理，名字默认等于 id。
 
 ### 1.2 设置页长什么样
 
@@ -111,12 +144,15 @@ ln -s <profile>/node_modules /path/to/dsh-qq-instruction/packages/dsh-qq-voice/n
 | `enabled` | **false** | 总开关。默认关：没填 key 时开着只会每次报错 |
 | `mode` | `manual` | `off` 不注册工具 / `manual` 模型显式调用才发 / `always` 预留（当前等同 manual） |
 | `ttsModel` | `qwen3-tts-flash` | 见 §3.1 的型号坑 |
-| `ttsVoice` | 空 | 音色名；留空=不传，用模型默认 |
+| `ttsVoice` | 空 | 默认音色；模型可用工具参数 `voice` 覆盖它 |
+| `voices` | `[]` | **可选音色目录**：`[{ id, label, note }]`。列在这里的音色会出现在工具描述里，模型自己挑；留空=不校验，透传模型给的 id |
+| `seedMode` | `model` | seed 策略：`model` 模型决定（没传则随机）/ `fixed` 固定用 `defaultSeed` / `random` 每次随机 |
+| `defaultSeed` | 2024 | `fixed` 模式使用的种子（`0 ≤ seed < 2^31`） |
 | `apiKey` | 空（secret） | TTS key；留空则读下面的环境变量 |
 | `apiKeyEnv` | `DASHSCOPE_API_KEY` | key 的环境变量名 |
 | `ttsBaseUrl` | DashScope 原生端点 | **不是 compatible-mode**（那里只有 chat/embeddings） |
 | `format` | `wav` | 期望格式；拿到什么就发什么（WAV 可直发，无需 silk/ffmpeg） |
-| `requestTemplate` | 空 | 可选：覆盖请求体模板（JSON），支持 `{{text}}`/`{{model}}`/`{{voice}}`/`{{format}}` |
+| `requestTemplate` | 空 | 可选：覆盖请求体模板（JSON），支持 `{{text}}`/`{{model}}`/`{{voice}}`/`{{format}}`/`{{seed}}`/`{{instruction}}`（**`{{seed}}` 不要加引号**） |
 | `wsUrl` | `wss://qapi.civer.cn` | NapCat 的 OneBot v11 正向 WS |
 | `accessToken` | 空（secret） | NapCat token；作为 `Authorization: Bearer` 头发送 |
 | `idleCloseMs` | 120000 | 空闲多久自动断开（0=不断） |
@@ -180,13 +216,25 @@ POST https://maas.qianwenaiapi.com/api/v1/services/audio/tts/SpeechSynthesizer
     ttsBaseUrl: https://maas.qianwenaiapi.com/api/v1/services/audio/tts/SpeechSynthesizer
     ttsModel: qwen-audio-3.0-tts-flash
     ttsVoice: qwen-audio-3.0-tts-flash-longlinx-efc30de04468458684cda530c7863e63
+    voices:
+      - id: qwen-audio-3.0-tts-flash-longlinx-efc30de04468458684cda530c7863e63
+        label: 龙灵安希
+        note: 偏御姐、语速偏慢
+    seedMode: model
+    defaultSeed: 2024
     format: wav
-    requestTemplate: '{"model":"{{model}}","input":{"text":"{{text}}","voice":"{{voice}}","format":"{{format}}","sample_rate":24000,"seed":2024}}'
+    # 注意 {{seed}} 在模板里**不加引号**（它是数字）；想让模型控制语气就必须写 {{seed}}，
+    # 写死 "seed":2024 等于把语气钉死。{{instruction}} 用于 style。
+    requestTemplate: '{"model":"{{model}}","input":{"text":"{{text}}","voice":"{{voice}}","format":"{{format}}","sample_rate":24000,"seed":{{seed}},"instruction":"{{instruction}}"}}'
     apiKey: <qianwenai key>
 ```
 
 > 内置请求体是 DashScope 形状（`input.text / input.voice / parameters.format`）；
 > 换平台时用 `requestTemplate` 覆盖即可，**不用改代码**。
+>
+> ⚠️ **模板会屏蔽参数**：模板里写死的东西，工具参数改不动它。想让模型控制 seed/style，
+> 模板里就必须用 `{{seed}}` / `{{instruction}}`；写死 `"seed":2024` 的话，`seed` 参数会被忽略
+> （音色不受影响，因为模板里用的是 `{{voice}}`）。
 
 ## 四、它是怎么发出去的（为什么不用 dsh-qq-bot）
 

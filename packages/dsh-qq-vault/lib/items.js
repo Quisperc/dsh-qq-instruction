@@ -46,13 +46,32 @@ const LABELS = {
   allowTools: 'allowTools（QQ 会话工具白名单）',
   perChatSession: 'perChatSession（按会话隔离）',
   logAdapterFrames: 'logAdapterFrames（适配器帧日志）',
+  // dsh-qq-voice（语音回复）
+  enabled: 'enabled（语音总开关）',
+  wsUrl: 'wsUrl（NapCat WS 地址）',
+  accessToken: 'accessToken（NapCat 令牌，敏感）',
+  ttsBaseUrl: 'ttsBaseUrl（TTS 端点）',
+  ttsModel: 'ttsModel（TTS 型号）',
+  ttsVoice: 'ttsVoice（音色 id）',
+  apiKey: 'apiKey（TTS API key，敏感）',
+  apiKeyEnv: 'apiKeyEnv（key 的环境变量名）',
+  format: 'format（音频格式）',
+  maxChars: 'maxChars（单条最多字数）',
+  maxPerHour: 'maxPerHour（每小时上限）',
+  cooldownSec: 'cooldownSec（两条之间的冷却秒数）',
+  ownerOnly: 'ownerOnly（仅拥有者可用）',
+  allowGroups: 'allowGroups（允许语音的群）',
+  timeoutMs: 'timeoutMs（合成+发送总超时）',
+  requestTemplate: 'requestTemplate（自定义请求体模板）',
+  profilePath: 'profilePath（读策略用的配置路径）',
+  idleCloseMs: 'idleCloseMs（WS 空闲断开）',
 };
 
 /**
  * 这些键名出现在块内 → 该块算敏感（token / QQ 号 / 群号 / 拥有者）。
  * 用内容判断而不是按 item id 写死：以后新增键也能自动识别。
  */
-const SENSITIVE_PATTERN = /accessToken:|owners:|superAdmins:|allow:|token/i;
+const SENSITIVE_PATTERN = /accessToken:|apiKey:|owners:|superAdmins:|allow:|token|secret/i;
 
 /** 按行算缩进（空格数；tab 记 1）。 */
 function indentOf(line) {

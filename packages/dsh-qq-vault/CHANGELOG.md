@@ -2,6 +2,31 @@
 
 > 只记这个包自己的变化。仓库级变化看根目录 `CHANGELOG.md`。
 
+## [Unreleased]
+
+> 用户诉求：「vault 为导入导出也需要支持等」——新插件的配置也要能备份/迁移。
+
+### Added — 语音插件（dsh-qq-voice）纳入逐项备份
+
+- `- id: dsh-qq-voice` 段进入动态发现：item id 形如 `voice.ttsVoice`、`voice.apiKey`，
+  分组为 `voice`（UI 显示名 `dsh-qq-voice（语音回复）`），按本机实际配置动态列出（当前 14 项）
+- 敏感标记：`voice.apiKey`、`voice.accessToken` 与 qq-bot 的 token 同级
+  （`SENSITIVE_PATTERN` 增补 `apiKey:`，顺带让 qq-bot 的 `imageGen.apiKey` 也正确标敏感）
+- 段不存在时分组 `present:false` 且 0 项，不报错——一眼能看出「这台机器没有语音配置可备份」
+
+### Fixed — 前缀映射从 if 链改为查表（防写错段）
+
+- 以前 `previewImport` 按 `id.startsWith('qqbot.')` / `'whale.'` 判断归属，
+  `entryIdOf` 又兜底成 qq-bot：新插件的键会被**静默写进 qq-bot 段**（写坏配置且不报错）
+- 改为 `lib/constants.js` 的 `ENTRY_GROUP` → `PREFIX_ENTRY` 查表；未知前缀在写回时
+  **判该项失败并跳过**，不再猜归属。新增插件只需在条目表登记一行
+
+### Tests
+
+- 新增 `test/voice-item.test.mjs`（6 项）：逐项发现与敏感标记、折行块整块取到（`>-` 不能只剩首行）、
+  只应用 1 项时其余字节不变（含注释）、同内容往返零差异、段缺失不报错、不跨条目边界
+
+
 ## [0.5.0] - 2026-11-14
 
 > 用户诉求：「改成每一个导入的配置项都进行对比，由用户进行多选确认再导入；

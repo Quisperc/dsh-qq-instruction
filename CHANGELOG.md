@@ -4,6 +4,24 @@
 > 每次改动都要记一笔——**半年后你会想知道当时为什么这么改**。
 > 版本号是**双轨**的（项目本体 + 插件包），规则见 CONTRIBUTING §6。
 
+## [1.33.0] - 2026-11-15（语音参数交给模型 + vault 纳管语音配置 + Pages 修复）
+
+### Added — dsh-qq-voice v0.2.0：参数由模型自决
+- 工具新增可选 `voice`（id 或目录里的名字）、`seed`、`style` → `input.instruction`
+- 配置新增 `voices`（可选音色目录，**工具描述动态列出**，模型据此挑音色）、`seedMode`（model/fixed/random）、`defaultSeed`
+- 模板支持 `{{seed}}` / `{{instruction}}`；音色不在目录里会被拒绝（防模型编 id）
+- 测试 81 → **108 项**
+
+### Added — dsh-qq-vault v0.6.0：语音配置纳入逐项备份
+- 新增 `voice.*` 分组（真机 17 项），`voice.apiKey` / `voice.accessToken` 标敏感
+- 前缀→条目映射改查表：**未知前缀不再兜底写进 qq-bot 段**（原来会静默写错位置）
+- 测试 92 项（含 6 项 voice 专项）
+
+### Fixed — GitHub Pages 构建失败
+- 根因：`packages/dsh-qq-voice/node_modules`（指向宿主 profile 的**符号链接**）被 `git add -A` 提交，Jekyll 遇到仓库外软链直接失败（连续 3 次 errored）
+- 已 `git rm --cached` 并从 `.gitignore` 补不带斜杠的 `packages/*/node_modules`（同时匹配目录与软链）
+- 修复后 Pages 构建 `built`，索引三个插件均可访问
+
 ## [1.32.0] - 2026-11-15（TTS 接通自定义音色 + voice 插件规范对齐）
 
 ### Added — TTS 真机接通（qianwenai 平台）

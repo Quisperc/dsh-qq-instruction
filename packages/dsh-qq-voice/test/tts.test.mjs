@@ -76,6 +76,62 @@ test('renderTemplate：非法 JSON 抛错（调用方转成可读错误）', () 
   assert.throws(() => renderTemplate('[1,2]', { text: 'a', model: 'b', voice: 'c', format: 'd' }), /JSON 对象/);
 });
 
+// ---------------------------------------------------------------- seed / instruction
+
+test('renderTemplate：{{seed}} 是数字占位符，0 不会被当成空', () => {
+  const body = renderTemplate('{"input":{"text":"{{text}}","seed":{{seed}}}}', {
+    text: '你好', model: 'm', voice: 'v', format: 'wav', seed: 0,
+  });
+  // 关键：JSON.stringify(0) 是 "0"，slice(1,-1) 会变成空串——所以数字不能用字符串那条路
+  assert.equal(body.input.seed, 0);
+  assert.equal(typeof body.input.seed, 'number');
+
+  const body2 = renderTemplate('{"seed":{{seed}}}', { text: 't', model: 'm', voice: '', format: '', seed: 2024 });
+  assert.equal(body2.seed, 2024);
+});
+
+test('renderTemplate：没给 seed 时写成 null（仍是合法 JSON）', () => {
+  const body = renderTemplate('{"seed":{{seed}},"t":"{{text}}"}', { text: 'a', model: 'm', voice: '', format: '' });
+  assert.equal(body.seed, null);
+  assert.ok(Object.prototype.hasOwnProperty.call(body, 'seed'), 'null 也要保留这个键，方便服务端判断语义');
+});
+
+test('renderTemplate：{{instruction}} 走字符串转义（含引号也不破坏 JSON）', () => {
+  const body = renderTemplate('{"input":{"text":"{{text}}","instruction":"{{instruction}}"}}', {
+    text: 'x', model: 'm', voice: '', format: '', instruction: '慢一点、"压低"声音',
+  });
+  assert.equal(body.input.instruction, '慢一点、"压低"声音');
+});
+
+test('buildTtsBody：内置形状把 seed 放进 input.seed（不是 parameters）', () => {
+  const body = buildTtsBody({ text: '你好', model: 'm', voice: 'v', format: 'wav', seed: 7 });
+  assert.equal(body.input.seed, 7);
+  assert.equal(body.parameters.seed, undefined);
+  assert.deepEqual(body.parameters, { format: 'wav' });
+});
+
+test('buildTtsBody：instruction 进 input；没有就不出现这个键', () => {
+  const withStyle = buildTtsBody({ text: '你好', model: 'm', voice: 'v', format: '', instruction: '慢一点' });
+  assert.equal(withStyle.input.instruction, '慢一点');
+  const without = buildTtsBody({ text: '你好', model: 'm', voice: 'v', format: '' });
+  assert.equal('instruction' in without.input, false);
+  assert.equal('seed' in without.input, false, '没给 seed 时不要塞 null 给服务端');
+});
+
+test('buildTtsBody：模板路径也带 seed 与 instruction', () => {
+  const template = '{"model":"{{model}}","input":{"text":"{{text}}","voice":"{{voice}}","seed":{{seed}},"instruction":"{{instruction}}"}}';
+  const body = buildTtsBody({ text: 'a', model: 'm', voice: 'v', format: 'wav', template, seed: 42, instruction: '轻快' });
+  assert.equal(body.input.seed, 42);
+  assert.equal(body.input.instruction, '轻快');
+});
+
+test('buildTtsBody：非整数 seed 一律不写进内置形状', () => {
+  for (const bad of [undefined, null, 1.5, NaN, 'abc']) {
+    const body = buildTtsBody({ text: 'a', model: 'm', voice: '', format: '', seed: bad });
+    assert.equal('seed' in body.input, false, `seed=${String(bad)} 不该被写进去`);
+  }
+});
+
 test('extractAudio：认 output.audio.url / output.audio.data / data[0].url / 裸字符串', () => {
   assert.deepEqual(extractAudio({ output: { audio: { url: 'https://x/a.wav' } } }), { kind: 'url', url: 'https://x/a.wav' });
   assert.deepEqual(extractAudio({ output: { audio: { data: 'AAA' } } }), { kind: 'b64', data: 'AAA' });

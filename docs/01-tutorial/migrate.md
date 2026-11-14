@@ -31,7 +31,7 @@
 
 ## 1. 在旧机器上打包
 
-打开 **设置 → 插件 → QQBot 备份**。卡片会把可导出的东西**逐项列出**（按组：`dsh-qq-bot` 的每个一级配置块 / 人格源文件 / 记忆库），默认**全不选**，由你勾：
+打开 **设置 → 插件 → QQBot 备份**。卡片会把可导出的东西**逐项列出**（按组：`dsh-qq-bot` 的每个一级配置块 / **`dsh-qq-voice` 的每个配置块** / 人格源文件 / 记忆库），默认**全不选**，由你勾：
 
 | 建议勾 | 项 | 说明 |
 |---|---|---|
@@ -39,6 +39,7 @@
 | ✅ | `persona` | 人格的**生效值**（`config.persona.text`，约 4.5k 字） |
 | ✅ | `group` / `private` / `auth` | 准入策略：谁能触发、谁能私聊 |
 | ⬜ | `vision` / `reply` / `proactive` / `session` / … | 只有你手调过才需要；不勾就用包内默认值 |
+| ⬜ | **`voice.apiKey` / `voice.ttsVoice` / `voice.ttsModel`** | 语音回复（`dsh-qq-voice`）。**用了语音就建议勾**：`apiKey` 与 `ttsVoice` 是本机专有的，不带走新机器上会直接报错 |
 | ⬜ | `memory.db` | 记忆库，含群友隐私；用 `VACUUM INTO` 导出，不会丢 WAL 里已提交的数据 |
 | ⬜ | `persona.source` | 仓库里 `persona/whale.md` 的副本（仅供对照） |
 
@@ -51,6 +52,7 @@
 ```
 items/qqbot.onebot.yml        ← 每个勾选的配置块单独一个文件
 items/qqbot.persona.yml
+items/voice.apiKey.yml       ← 语音插件的项同样是 config 下的一级块
 persona/persona.text          ← 人格生效值（勾了 persona 才有）
 memory/memory.db              ← SQLite VACUUM INTO 快照（勾了记忆才有）
 manifest.json                 ← DSH/插件版本、导出时间、**逐项** sha256

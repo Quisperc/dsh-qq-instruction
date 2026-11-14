@@ -2,6 +2,32 @@
 
 本文件只记**这个包**的变化。仓库级变更见根目录 `CHANGELOG.md`。
 
+## [Unreleased] - 2026-11-15
+
+把语音参数的**决定权交给模型**：音色与种子不再是配置里钉死的常量。
+
+### Added
+- `qq_voice` 新增三个可选参数：
+  - `voice`：音色 id **或名字**（别名）；配了目录时只认目录内的
+  - `seed`：`0 ≤ seed < 2^31`，换 seed 换语气与节奏
+  - `style`：自然语言语气说明，作为 `instruction` 透传给支持它的端点
+- 配置新增三项（全部 volatile）：
+  - `voices`：可选音色目录 `[{id,label,note}]`，**会渲染进工具描述**，模型才知道能挑什么
+  - `seedMode`：`model`（模型决定，没传则随机）/ `fixed`（永远用 `defaultSeed`）/ `random`（每次随机）
+  - `defaultSeed`：`fixed` 模式用，兼作非法值兜底
+- `renderTemplate` 支持 `{{seed}}`（**数字占位符，不要加引号**）与 `{{instruction}}`
+- `buildTtsBody` 把 `seed` / `instruction` 放进 **`input`**（不是 `parameters`）
+- 工具描述动态生成：列出目录里的音色（名字 + 说明 + id）与当前 seed 策略
+- 成功结果新增 `voice` / `voiceSource` / `seed` / `seedSource` / `style`，让模型知道这次用了什么
+
+### Fixed
+- **随机种子恒为 0 的 bug**：`random() % LIMIT` 对 [0,1) 的小数取模还是它自己，`floor` 后永远是 0；
+  改成先取小数部分再乘以 `2^31`。由新单测「resolveSeed：三态矩阵」逮到。
+
+### Tests
+- 81 → **108** 项：seed 三态矩阵、音色目录校验/别名、seed 越界回落、`{{seed}}` 的 0 值、
+  `instruction` 转义、模板屏蔽参数的说明性用例
+
 ## [0.1.0] - 2026-11-15
 
 首批功能：让 QQBot 能发语音。

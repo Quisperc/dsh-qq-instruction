@@ -23,14 +23,18 @@
 | 确认导入 | 凭确认码写入：先备份配置与记忆库，再整段替换配置、恢复记忆、**写回人格** | 必须勾选确认 + 确认码有效 |
 | 清理旧备份 | 只看 / 真删，只删本插件产出的包，保留最近 10 个 | dry-run |
 
-四个数据项（**默认全不选**）：
+可勾选的内容按**来源分组**（**默认全不选**）。配置类分组里的每一项 = 该插件 `config:` 下的
+**一级子键**，动态发现，插件加新键会自动出现：
 
-| key | 内容 | 敏感 |
+| 分组 | 内容 | 敏感 |
 |---|---|---|
-| `config` | `cordis.patch.yml` 里的 `- id: dsh-qq-bot` 段（含 NapCat token、QQ 号、`persona.text`） | ⚠ 是 |
-| `persona` | **生效人格**：`dsh-qq-bot.config.persona.text`（写回配置）；附带 `persona/whale.md` 源文件副本 | 否 |
-| `memory` | `QQ_msg/.dsh-meow/memory.db` | ⚠ 是（含他人聊天内容） |
-| `whaleConfig` | `cordis.patch.yml` 里的 `- id: dsh-qq-whale` 段（通常不存在） | 否 |
+| `qqbot.*` | `- id: dsh-qq-bot` 段的各个一级配置项（`onebot` 含 NapCat token、`persona` 含生效人设、`group` 含群号…） | ⚠ `onebot` / `auth` / `admin` 等含 token、QQ 号、群号 |
+| `voice.*` | `- id: dsh-qq-voice` 段的各个一级配置项（TTS 端点/型号、复刻音色 id、`requestTemplate` 等） | ⚠ `voice.apiKey`（TTS key）、`voice.accessToken`（NapCat 令牌） |
+| `persona.source` | 人格源文件 `persona/whale.md`（编辑真源副本；**生效人格在 `qqbot.persona` 里**） | ⚠ 是 |
+| `memory.db` | `QQ_msg/.dsh-meow/memory.db` | ⚠ 是（含他人聊天内容） |
+
+> `- id: dsh-qq-voice` 段不存在时（插件没装），`voice` 分组会显示 `present:false` 且 0 项，
+> 不会报错——这样你能一眼看出「这台机器没有语音配置可备份」。
 
 **`sessions`（会话历史）不实现**：会话日志是 DSH 私有格式（zstd JSONL + 投影缓存），跨机器恢复会连带
 preset 锁与工作区账本一起搬，风险高于收益。UI 上渲染为**禁用行并写明原因**（`capabilities` 里 `supported:false`）。
@@ -45,7 +49,9 @@ preset 锁与工作区账本一起搬，风险高于收益。UI 上渲染为**�
 2. 把包传到新机（或本机先上传到 `$DSH_HOME/backups/qqbot-vault/`）；
 3. 新机同一张卡片 → 选包 → 点「预览差异」→ 看到**逐项**的「未变 / 将替换 / 将新增」→ 只勾你要的那几项 → 点「执行导入」（凭一次性确认码）。
 
-关键点：**没勾的配置项与注释一字不改**。只想恢复人设，就只勾 `qqbot.persona`。
+关键点：**没勾的配置项与注释一字不改**。只想恢复人设，就只勾 `qqbot.persona`；
+要把语音回复一起搬走，再勾上 `voice.*` 里那几项（至少 `voice.apiKey` / `voice.ttsVoice` / `voice.ttsModel`，
+否则新机器上语音会因缺 key 或音色 id 而报错）。
 
 ### 1.2 设置页长什么样
 
@@ -141,7 +147,8 @@ ln -sfn "$PKG" "$PROFILE/node_modules/dsh-qq-vault"
 所以走**行扫描**（`lib/items.js`，复用 `lib/persona.js` 的思路）：
 按缩进与键名定位 `config:` 下的**一级子键**，整块替换或插入，其余字节原样保留。
 配置项**动态发现**，不硬编码清单——qq-bot 0.14 新增的 `reply.bubbleGapMinMs`、`sticker.*`
-不用改代码就会出现在 `/items` 里。
+不用改代码就会出现在 `/items` 里；`dsh-qq-voice` 这种新插件的段（`voice.*`）也一样，
+只在 `lib/constants.js` 的条目表里登记一行即可。
 
 写入还有一道**写后自检**：写完立刻把该项读回来，与预期块逐字比对；
 不一致（例如手工改包导致缩进坏了）就判该项失败并跳过，绝不把坏 YAML 落进配置。

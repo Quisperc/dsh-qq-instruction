@@ -67,6 +67,7 @@ function makeTool(options = {}) {
     readProfile: () => PROFILE,
     synthesizeImpl: options.synth ?? (async () => ({ ok: true, kind: 'b64', data: Buffer.from('wav!').toString('base64') })),
     loadAudioImpl: options.loadAudio ?? (async () => ({ ok: true, bytes: Buffer.from('wav!') })),
+    random: options.random ?? (() => 0.5),
   });
   return { tool, sent };
 }
@@ -223,4 +224,174 @@ test('lastUserText：从事件里取最后一条 user/message 的文本；取不
   assert.equal(lastUserText({ session: null }), '');
   // 事件里没有 content 数组时也不炸
   assert.equal(lastUserText({ session: { snapshotEvents: () => [{ type: 'user/message', data: {} }] } }), '');
+});
+
+// ---------------------------------------------------------------- 模型自定参数（音色/seed/语气）
+
+const VOICES = [
+  { id: 'qwen-audio-3.0-tts-flash-longlinx-abc', label: '龙灵安希', note: '偏御姐、语速偏慢' },
+  { id: 'qwen-audio-3.0-tts-flash-cherry-def', label: 'Cherry', note: '阳光' },
+];
+
+test('工具 schema：voice / seed / style 三个可选参数都在', () => {
+  const { tool } = makeTool();
+  assert.equal(tool.parameters.voice.type, 'string');
+  assert.equal(tool.parameters.seed.type, 'number');
+  assert.equal(tool.parameters.style.type, 'string');
+  for (const key of ['voice', 'seed', 'style']) {
+    assert.notEqual(tool.parameters[key].required, true, `${key} 不该是必填`);
+  }
+});
+
+test('工具描述：目录非空时把每个音色的名字与 id 列出来（模型才知道能挑）', () => {
+  const { tool } = makeTool({ config: { voices: VOICES } });
+  assert.match(tool.description, /龙灵安希/);
+  assert.match(tool.description, /偏御姐/); // note 也要带上，模型据此选语气
+  assert.match(tool.description, /qwen-audio-3\.0-tts-flash-longlinx-abc/);
+  assert.match(tool.description, /Cherry/);
+  // 目录为空时不该提具体名字，但要说明可以留空
+  const bare = makeTool({ config: { voices: [] } }).tool;
+  assert.doesNotMatch(bare.description, /龙灵安希/);
+  assert.match(bare.description, /留空|默认音色/);
+});
+
+test('工具描述：seed 策略三态各有对应说明', () => {
+  assert.match(makeTool({ config: { seedMode: 'model' } }).tool.description, /seed/);
+  assert.match(makeTool({ config: { seedMode: 'fixed' } }).tool.description, /固定|忽略/);
+  assert.match(makeTool({ config: { seedMode: 'random' } }).tool.description, /随机/);
+  assert.match(makeTool().tool.description, /style/);
+});
+
+test('音色：拒绝目录外的 id，并把可选项告诉模型（不调 TTS、不发送）', async () => {
+  let synthCalls = 0;
+  const { tool, sent } = makeTool({
+    config: { voices: VOICES },
+    synth: async () => { synthCalls += 1; return { ok: true, kind: 'b64', data: 'AAAA' }; },
+  });
+  const r = await tool.execute({ text: 'hi', voice: '编造的id' }, { agent: agentWith(OWNER_TEXT) });
+  assert.equal(r.ok, false);
+  assert.match(r.error, /不在可选目录/);
+  assert.match(r.error, /龙灵安希/);
+  assert.equal(synthCalls, 0, '校验失败时不该先花一次 TTS');
+  assert.equal(sent.length, 0);
+});
+
+test('音色：模型传名字（别名）会被换成真 id 交给 TTS；结果里回报用了什么', async () => {
+  let usedVoice = '';
+  const { tool } = makeTool({
+    config: { voices: VOICES },
+    synth: async (opts) => { usedVoice = opts.voice; return { ok: true, kind: 'b64', data: 'AAAA' }; },
+  });
+  const r = await tool.execute({ text: 'hi', voice: '龙灵安希' }, { agent: agentWith(OWNER_TEXT) });
+  assert.equal(r.ok, true);
+  assert.equal(usedVoice, VOICES[0].id);
+  assert.equal(r.voice, VOICES[0].id);
+  assert.equal(r.voiceSource, 'alias');
+});
+
+test('音色：模型没传时用配置默认；目录为空时原样透传', async () => {
+  let usedVoice = '';
+  const capture = async (opts) => { usedVoice = opts.voice; return { ok: true, kind: 'b64', data: 'AAAA' }; };
+
+  const withDefault = makeTool({ config: { ttsVoice: 'default-v', voices: VOICES, synth: undefined }, synth: capture });
+  const r1 = await withDefault.tool.execute({ text: 'hi' }, { agent: agentWith(OWNER_TEXT) });
+  assert.equal(r1.ok, true);
+  assert.equal(usedVoice, 'default-v');
+  assert.equal(r1.voiceSource, 'default');
+
+  const open = makeTool({ config: { voices: [] }, synth: capture });
+  const r2 = await open.tool.execute({ text: 'hi', voice: 'any-id' }, { agent: agentWith(OWNER_TEXT) });
+  assert.equal(r2.ok, true);
+  assert.equal(usedVoice, 'any-id');
+  assert.equal(r2.voiceSource, 'passthrough');
+});
+
+test('seed：model 模式把模型给的值传下去', async () => {
+  let usedSeed;
+  const { tool } = makeTool({
+    config: { seedMode: 'model' },
+    synth: async (opts) => { usedSeed = opts.seed; return { ok: true, kind: 'b64', data: 'AAAA' }; },
+  });
+  const r = await tool.execute({ text: 'hi', seed: 123 }, { agent: agentWith(OWNER_TEXT) });
+  assert.equal(r.ok, true);
+  assert.equal(usedSeed, 123);
+  assert.equal(r.seed, 123);
+  assert.equal(r.seedSource, 'model');
+});
+
+test('seed：model 模式没传就随机（用注入的随机源，结果可断言）', async () => {
+  let usedSeed;
+  const { tool } = makeTool({
+    config: { seedMode: 'model' },
+    random: () => 0.25,
+    synth: async (opts) => { usedSeed = opts.seed; return { ok: true, kind: 'b64', data: 'AAAA' }; },
+  });
+  const r = await tool.execute({ text: 'hi' }, { agent: agentWith(OWNER_TEXT) });
+  assert.equal(r.seedSource, 'random');
+  assert.equal(usedSeed, r.seed);
+  assert.ok(Number.isInteger(r.seed) && r.seed > 0, '随机种子不该恒为 0');
+});
+
+test('seed：fixed 模式忽略模型传值；random 模式也忽略', async () => {
+  let usedSeed;
+  const capture = async (opts) => { usedSeed = opts.seed; return { ok: true, kind: 'b64', data: 'AAAA' }; };
+
+  const fixed = makeTool({ config: { seedMode: 'fixed', defaultSeed: 2024 }, synth: capture });
+  const r1 = await fixed.tool.execute({ text: 'hi', seed: 999 }, { agent: agentWith(OWNER_TEXT) });
+  assert.equal(r1.seed, 2024);
+  assert.equal(usedSeed, 2024);
+  assert.equal(r1.seedSource, 'fixed');
+
+  const random = makeTool({ config: { seedMode: 'random' }, random: () => 0.5, synth: capture });
+  const r2 = await random.tool.execute({ text: 'hi', seed: 999 }, { agent: agentWith(OWNER_TEXT) });
+  assert.notEqual(r2.seed, 999, 'random 模式下模型传值要被忽略');
+  assert.equal(r2.seedSource, 'random');
+  assert.equal(usedSeed, r2.seed);
+});
+
+test('seed：越界/非整数回落，不会把非法值透给服务端', async () => {
+  let usedSeed;
+  const { tool } = makeTool({
+    config: { seedMode: 'model' },
+    random: () => 0.5,
+    synth: async (opts) => { usedSeed = opts.seed; return { ok: true, kind: 'b64', data: 'AAAA' }; },
+  });
+  for (const bad of [-1, 1e12, 2.5]) {
+    const r = await tool.execute({ text: 'hi', seed: bad }, { agent: agentWith(OWNER_TEXT) });
+    assert.equal(r.ok, true);
+    assert.ok(Number.isInteger(usedSeed) && usedSeed >= 0 && usedSeed < 2 ** 31, `seed=${bad} 应被回落`);
+  }
+});
+
+test('style：作为 instruction 透传给 TTS；不传时不出现', async () => {
+  let seen;
+  const { tool } = makeTool({
+    config: { seedMode: 'model' },
+    synth: async (opts) => { seen = opts.instruction; return { ok: true, kind: 'b64', data: 'AAAA' }; },
+  });
+  const r1 = await tool.execute({ text: 'hi', style: '  慢一点，压低声音  ' }, { agent: agentWith(OWNER_TEXT) });
+  assert.equal(r1.ok, true);
+  assert.equal(seen, '慢一点，压低声音', '首尾空白要去掉');
+  assert.equal(r1.style, '慢一点，压低声音');
+
+  await tool.execute({ text: 'hi' }, { agent: agentWith(OWNER_TEXT) });
+  assert.ok(seen === '' || seen === undefined, '没传 style 时不该有内容');
+});
+
+test('参数组合：音色 + seed + style 一起传，全部生效', async () => {
+  let got = null;
+  const { tool } = makeTool({
+    config: { voices: VOICES, seedMode: 'model' },
+    synth: async (opts) => { got = opts; return { ok: true, kind: 'b64', data: 'AAAA' }; },
+  });
+  const r = await tool.execute(
+    { text: '你好呀', voice: 'Cherry', seed: 7, style: '轻快' },
+    { agent: agentWith(OWNER_TEXT) },
+  );
+  assert.equal(r.ok, true);
+  assert.equal(got.voice, VOICES[1].id);
+  assert.equal(got.seed, 7);
+  assert.equal(got.instruction, '轻快');
+  assert.equal(r.voice, VOICES[1].id);
+  assert.equal(r.seed, 7);
 });

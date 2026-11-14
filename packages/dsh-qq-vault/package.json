@@ -1,6 +1,6 @@
 {
   "name": "dsh-qq-vault",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "QQBot 备份：在 DSH 设置页导出/导入 QQBot 的配置、人设与记忆（默认 dry-run，先备份再写入）。",
   "icon": "icon.svg",
   "author": "civer",

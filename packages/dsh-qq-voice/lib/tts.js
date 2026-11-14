@@ -35,21 +35,33 @@ export function truncateText(text, maxChars) {
 /**
  * 用模板拼请求体。
  *
- * 模板里只支持整值替换（`{{text}}` 等），不做表达式——少一个能力，少一类注入风险。
+ * 模板里只支持整值替换（`{{seed}}` 等），不做表达式——少一个能力，少一类注入风险。
  * 替换用字符串化后的值，所以文本里的引号/换行会由 JSON.parse 负责还原。
  *
+ * `{{seed}}` 与其它占位符的**写法不同**，这是刻意的：
+ *   - 字符串类（text/model/voice/format/instruction）放在引号里：`"text":"{{text}}"`
+ *   - seed 是数字，**不要加引号**：`"seed":{{seed}}`；写成 `"{{seed}}"` 会得到字符串 "2024"，
+ *     有些服务端会当成非法参数。没给 seed 时替换成 `null`（合法 JSON，语义是"不指定"）。
+ *
  * @param {string} template JSON 字符串模板
- * @param {{text: string, model: string, voice: string, format: string}} vars
+ * @param {{text: string, model: string, voice: string, format: string, seed?: number, instruction?: string}} vars
  * @returns {Record<string, unknown>}
  * @throws {Error} 模板不是合法 JSON 对象时抛（调用方转成可读错误）
  */
 export function renderTemplate(template, vars) {
+  // 数字占位符：整数直接写，其余写 null（不能让 "undefined" 出现在 JSON 里）
+  const seedRaw = Number.isInteger(vars.seed) ? String(vars.seed) : 'null';
+  const quoteRaw = (value) => (typeof value === 'string' ? JSON.stringify(value).slice(1, -1) : '');
   const replaced = String(template)
     // 用函数形式避免 `$&` 这类替换模式被当成特殊指令
-    .replace(/\{\{text\}\}/g, () => JSON.stringify(vars.text).slice(1, -1))
-    .replace(/\{\{model\}\}/g, () => JSON.stringify(vars.model).slice(1, -1))
-    .replace(/\{\{voice\}\}/g, () => JSON.stringify(vars.voice).slice(1, -1))
-    .replace(/\{\{format\}\}/g, () => JSON.stringify(vars.format).slice(1, -1));
+    .replace(/\{\{text\}\}/g, () => quoteRaw(vars.text))
+    .replace(/\{\{model\}\}/g, () => quoteRaw(vars.model))
+    .replace(/\{\{voice\}\}/g, () => quoteRaw(vars.voice))
+    .replace(/\{\{format\}\}/g, () => quoteRaw(vars.format))
+    .replace(/\{\{instruction\}\}/g, () => quoteRaw(vars.instruction))
+    // 允许模板把 seed 写在引号里（"{{seed}}"）：那样会得到字符串，交给服务端判；
+    // 我们不主动纠正，因为个别服务商确实要字符串。文档里推荐不加引号。
+    .replace(/\{\{seed\}\}/g, () => seedRaw);
   const parsed = JSON.parse(replaced);
   if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
     throw new Error('请求体模板必须是一个 JSON 对象');
@@ -60,20 +72,34 @@ export function renderTemplate(template, vars) {
 /**
  * 构造请求体：有模板用模板，没有就用内置形状。
  *
- * @param {{text: string, model: string, voice?: string, format?: string, template?: string}} opts
+ * 内置形状把 seed 放在 **`input.seed`**（qianwenai / DashScope 的原生 TTS 都是这个位置，
+ * 放在 parameters 里会被忽略）。`instruction` 同样在 `input` 里，用于控制语气/方言/角色。
+ *
+ * @param {{text: string, model: string, voice?: string, format?: string, template?: string, seed?: number, instruction?: string}} opts
  * @returns {Record<string, unknown>}
  */
 export function buildTtsBody(opts) {
   const model = typeof opts.model === 'string' ? opts.model : '';
   const voice = typeof opts.voice === 'string' ? opts.voice : '';
   const format = typeof opts.format === 'string' ? opts.format : '';
+  const instruction = typeof opts.instruction === 'string' ? opts.instruction.trim() : '';
   if (typeof opts.template === 'string' && opts.template.trim() !== '') {
-    return renderTemplate(opts.template, { text: opts.text, model, voice, format });
+    return renderTemplate(opts.template, {
+      text: opts.text,
+      model,
+      voice,
+      format,
+      seed: opts.seed,
+      instruction,
+    });
   }
   /** @type {Record<string, unknown>} */
   const input = { text: opts.text };
   // 空音色不传：传空串有些模型会当成"有一个叫空的音色"然后 400。
   if (voice !== '') input.voice = voice;
+  // 同理：seed/instruction 只在真的有值时才出现，避免把 null/空串塞给服务端。
+  if (Number.isInteger(opts.seed)) input.seed = opts.seed;
+  if (instruction !== '') input.instruction = instruction;
   /** @type {Record<string, unknown>} */
   const body = { model, input };
   if (format !== '') body.parameters = { format };
@@ -185,6 +211,7 @@ export function describeHttpFailure(status, detail, model) {
  * @param {{
  *   baseUrl: string, apiKey: string, text: string, model: string, voice?: string,
  *   format?: string, template?: string, timeoutMs?: number,
+ *   seed?: number, instruction?: string,
  *   fetchImpl?: typeof fetch, signal?: AbortSignal,
  * }} opts
  * @returns {Promise<{ok: true, kind: 'url', url: string} | {ok: true, kind: 'b64', data: string} | {ok: false, error: string, status?: number}>}
@@ -209,6 +236,8 @@ export async function synthesize(opts) {
       voice: opts.voice,
       format: opts.format,
       template: opts.template,
+      seed: opts.seed,
+      instruction: opts.instruction,
     });
   } catch (error) {
     return { ok: false, error: `请求体模板不合法：${error instanceof Error ? error.message : String(error)}` };

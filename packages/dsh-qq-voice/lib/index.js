@@ -16,12 +16,12 @@
 
 import fs from 'node:fs';
 
-import { Config, readConfig, resolveApiKey, toolsEnabled } from './config.js';
+import { Config, readConfig, resolveApiKey, resolveSeed, resolveVoice, toolsEnabled } from './config.js';
 import { checkTarget, createThrottle, parseSpeaker, readPolicyFromText } from './guard.js';
 import { OneBotSender } from './sender.js';
 import { synthesize, loadAudio, truncateText } from './tts.js';
 
-export { Config, readConfig, resolveApiKey, toolsEnabled };
+export { Config, readConfig, resolveApiKey, toolsEnabled, resolveVoice, resolveSeed };
 export { parseSpeaker, readPolicyFromText, checkTarget, createThrottle };
 export { OneBotSender };
 export { synthesize, loadAudio, truncateText };
@@ -84,6 +84,47 @@ export function readProfileText(profilePath) {
 }
 
 /**
+ * 造工具描述。
+ *
+ * 为什么是函数而不是常量：音色目录在配置里（volatile），描述里要把**当前**可选音色列给模型看，
+ * 否则模型不知道有得挑，只会一直用默认值。工具注册时求值一次；改完配置重载即刷新。
+ *
+ * @param {ReturnType<typeof readConfig>} cfg
+ * @returns {string}
+ */
+export function buildToolDescription(cfg) {
+  const parts = [
+    '把一段文字合成语音并发到当前 QQ 会话（或指定群/人）。',
+    '有人说「发条语音」「用语音说」「念给我听」时用它，别用文字假装语音。',
+    '**音色与种子由你自己决定**：想换个语气/节奏就传 voice 或 seed；拿不准就都留空用默认，别为了试探反复调用。',
+  ];
+
+  const voices = Array.isArray(cfg?.voices) ? cfg.voices : [];
+  if (voices.length > 0) {
+    const listed = voices
+      .map((v) => `${v.label}${v.note === '' ? '' : `（${v.note}）`} = ${v.id}`)
+      .join('；');
+    parts.push(`可选音色（voice 传 id 或名字都认）：${listed}。`);
+  } else if (typeof cfg?.ttsVoice === 'string' && cfg.ttsVoice !== '') {
+    parts.push(`当前默认音色：${cfg.ttsVoice}（没有可选目录，你也可以直接传别的 id）。`);
+  } else {
+    parts.push('当前没有配置音色目录，voice 留空即用服务端默认音色。');
+  }
+
+  if (cfg?.seedMode === 'fixed') {
+    parts.push('seed 由部署方固定，你传了也会被忽略（想让语气有变化请让部署方改 seedMode）。');
+  } else if (cfg?.seedMode === 'random') {
+    parts.push('seed 每次随机（你传了会被忽略）：同一个音色每句话的节奏都会略有不同。');
+  } else {
+    parts.push('seed 是整数（0 ≤ seed < 2^31）：同一个音色换个 seed 会换语气与节奏；留空则随机。');
+  }
+
+  parts.push('style 是可选的自然语言语气说明（如「慢一点、压低声音」），仅当端点与请求体模板支持 instruction 时才会生效，否则被忽略。');
+  parts.push('文本会被字数上限截断；只给拥有者用；有每小时条数与冷却限制，被拒时会告诉你还差多少秒。');
+  return parts.join('');
+}
+
+/**
  * 造工具定义（不经过 defineTool，纯对象，便于单测直接调 execute）。
  *
  * @param {{
@@ -94,6 +135,7 @@ export function readProfileText(profilePath) {
  *   synthesizeImpl?: typeof synthesize,
  *   loadAudioImpl?: typeof loadAudio,
  *   now?: () => number,
+ *   random?: () => number,
  * }} deps
  * @returns {any} 工具定义（name/description/parameters/output/execute）
  */
@@ -101,14 +143,19 @@ export function createVoiceTool(deps) {
   const readProfile = deps.readProfile ?? readProfileText;
   const synth = deps.synthesizeImpl ?? synthesize;
   const load = deps.loadAudioImpl ?? loadAudio;
+  const random = typeof deps.random === 'function' ? deps.random : Math.random;
 
   return {
     name: TOOL_NAME,
-    description: '把一段文字合成语音并发到当前 QQ 会话（或指定群/人）。'
-      + '有人说「发条语音」「用语音说」「念给我听」时用它，别用文字假装语音。'
-      + '文本会被字数上限截断；只给拥有者用；有每小时条数与冷却限制，被拒时会告诉你还差多少秒。',
+    // getter：注册时求值拿到最新目录；测试里读 tool.description 也是实时的。
+    get description() {
+      return buildToolDescription(deps.getConfig());
+    },
     parameters: {
       text: { type: 'string', required: true, description: '要念出来的文字（不要带表情符号与 Markdown）' },
+      voice: { type: 'string', description: '音色 id 或名字（留空 = 用配置默认；可选值见工具描述）' },
+      seed: { type: 'number', description: '随机种子 0 ≤ seed < 2^31，换 seed 会换语气与节奏（留空 = 按部署策略）' },
+      style: { type: 'string', description: '可选语气说明，如「慢一点、压低声音」；端点不支持时忽略' },
       message_type: { type: 'string', description: 'group 或 private（默认按当前会话推断）' },
       target_id: { type: 'string', description: '群号或 QQ 号（默认当前会话）' },
     },
@@ -168,6 +215,13 @@ export function createVoiceTool(deps) {
       // 6) 文本截断（如实告知，模型才知道自己说多了）。
       const { text, truncated, originalChars } = truncateText(rawText, cfg.maxChars);
 
+      // 6.5) 音色 / 种子 / 语气：这三项**允许模型自己决定**，留空则走配置默认。
+      //      音色在目录非空时只认目录里的 id 或名字——模型编 id 会拿到可读拒绝，而不是一次 400。
+      const pickedVoice = resolveVoice(cfg, args?.voice);
+      if (pickedVoice.ok !== true) return { ok: false, error: pickedVoice.error };
+      const pickedSeed = resolveSeed(cfg, args?.seed, random);
+      const instruction = typeof args?.style === 'string' ? args.style.trim() : '';
+
       // 7) 合成 → 下载 → 发送
       const apiKey = resolveApiKey(cfg);
       const audio = await synth({
@@ -175,9 +229,11 @@ export function createVoiceTool(deps) {
         apiKey,
         text,
         model: cfg.ttsModel,
-        voice: cfg.ttsVoice,
+        voice: pickedVoice.voice,
         format: cfg.format,
         template: cfg.requestTemplate,
+        seed: pickedSeed.seed,
+        instruction,
         timeoutMs: cfg.timeoutMs,
         signal: exec?.signal,
       });
@@ -206,6 +262,12 @@ export function createVoiceTool(deps) {
         seconds: Math.round((bytes.length / (16000 * 2)) * 10) / 10,
         chars: text.length,
         truncated,
+        // 把「这次到底用了什么」告诉模型：它下次才知道换哪个参数会有什么效果。
+        voice: pickedVoice.voice === '' ? '(服务端默认)' : pickedVoice.voice,
+        voiceSource: pickedVoice.source,
+        seed: pickedSeed.seed,
+        seedSource: pickedSeed.source,
+        ...(instruction === '' ? {} : { style: instruction }),
         ...(truncated ? { note: `原文本 ${originalChars} 字，已截断到 ${cfg.maxChars} 字` } : {}),
         remaining: stats.remaining === Infinity ? '不限' : stats.remaining,
       };

@@ -18,6 +18,20 @@ const Schema = SchemaModule?.default ?? SchemaModule;
 export const MODES = ['off', 'manual', 'always'];
 export const DEFAULT_MODE = 'manual';
 
+/**
+ * seed 策略（三态）。为什么要有：同一个音色 + 同一段文字，换 seed 会换语气与节奏，
+ * 这正好是「让模型自己决定怎么念」的抓手；但可复现性也很重要（排查、A/B 对比）。
+ *
+ *   model  —— 模型传了就用它，没传就随机（默认：自由度最高）
+ *   fixed  —— 永远用 defaultSeed，忽略模型传值（可复现）
+ *   random —— 每次随机，忽略模型传值（最像活人，但不可复现）
+ */
+export const SEED_MODES = ['model', 'fixed', 'random'];
+export const DEFAULT_SEED_MODE = 'model';
+
+/** seed 的合法上界（不含）：2^31。越界一律回落，别把非法值透给服务端。 */
+export const SEED_LIMIT = 2 ** 31;
+
 /** 出厂默认值：readConfig 在字段缺失/类型不对时回落到这里。 */
 export const DEFAULT_CONFIG = Object.freeze({
   enabled: false, // 默认关：没填 key 时开着只会每次报错
@@ -27,6 +41,9 @@ export const DEFAULT_CONFIG = Object.freeze({
   ttsBaseUrl: 'https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation',
   ttsModel: 'qwen3-tts-flash',
   ttsVoice: '',
+  voices: [], // 可选音色目录：模型只能从这里面挑（空 = 不校验，允许透传）
+  seedMode: DEFAULT_SEED_MODE,
+  defaultSeed: 2024,
   apiKey: '',
   apiKeyEnv: 'DASHSCOPE_API_KEY',
   format: 'wav',
@@ -68,7 +85,18 @@ export const Config = Schema.object({
   ttsModel: Schema.string().default(DEFAULT_CONFIG.ttsModel).volatile()
     .description('TTS 模型 id，如 qwen3-tts-flash（HTTP 可用）；qwen-audio-3.1-tts-flash 是实时(WS)型号，HTTP 会 400'),
   ttsVoice: Schema.string().default(DEFAULT_CONFIG.ttsVoice).volatile()
-    .description('音色名（留空 = 不传，用模型默认；可选值见 DashScope 文档）'),
+    .description('默认音色 id（留空 = 不传，用模型默认；可选值见服务商文档）。模型可用工具参数覆盖它'),
+  // 目录里的 id 会出现在工具描述里，让模型自己挑；空目录 = 不做校验（允许模型透传任意 id）。
+  voices: Schema.array(Schema.object({
+    id: Schema.string().description('音色 id（复刻音色一般是 {模型}-{prefix}-{hash} 形式）'),
+    label: Schema.string().description('给模型看的名字，如「龙灵安希」'),
+    note: Schema.string().description('一句话说明，如「偏御姐、语速偏慢」'),
+  })).default(DEFAULT_CONFIG.voices).volatile()
+    .description('可选音色目录：模型只能从这些里挑；留空 = 不校验，直接透传它给的 id'),
+  seedMode: Schema.string().default(DEFAULT_SEED_MODE).volatile()
+    .description('seed 策略：model=模型传了就用、没传随机 / fixed=永远用 defaultSeed / random=每次随机（忽略模型传值）'),
+  defaultSeed: Schema.number().default(DEFAULT_CONFIG.defaultSeed).volatile()
+    .description('fixed 模式下使用的种子；也是模型没传时的兜底参考值（0 ≤ seed < 2^31）'),
   apiKey: secretString('DashScope API key（只写字段；留空 = 读环境变量）'),
   apiKeyEnv: Schema.string().default(DEFAULT_CONFIG.apiKeyEnv).volatile()
     .description('API key 的环境变量名（apiKey 留空时才读它）'),
@@ -154,6 +182,102 @@ const str = (value, fallback) => (typeof value === 'string' ? value : fallback);
 const bool = (value, fallback) => (typeof value === 'boolean' ? value : fallback);
 
 /**
+ * 把整数夹到 [0, SEED_LIMIT)：非整数/NaN/越界都回落到 fallback。
+ *
+ * 为什么单独一个函数：seed 会被写进请求体，非法值换来的是一次 400，
+ * 而模型很容易编出 `1e9`、`-1`、`2024.5` 这类值。
+ *
+ * @param {unknown} value
+ * @param {number} fallback
+ * @returns {number}
+ */
+export function normalizeSeed(value, fallback = DEFAULT_CONFIG.defaultSeed) {
+  const n = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(n) || !Number.isInteger(n)) {
+    const f = typeof fallback === 'number' && Number.isInteger(fallback) ? fallback : DEFAULT_CONFIG.defaultSeed;
+    return f >= 0 && f < SEED_LIMIT ? f : DEFAULT_CONFIG.defaultSeed;
+  }
+  if (n < 0 || n >= SEED_LIMIT) return DEFAULT_CONFIG.defaultSeed;
+  return n;
+}
+
+/**
+ * 规整音色目录：只保留有 id 的条目，id 去重（后来的覆盖先来的），label/note 补成字符串。
+ *
+ * @param {unknown} value
+ * @returns {{id: string, label: string, note: string}[]}
+ */
+export function normalizeVoices(value) {
+  if (!Array.isArray(value)) return [];
+  /** @type {Map<string, {id: string, label: string, note: string}>} */
+  const byId = new Map();
+  for (const entry of value) {
+    if (entry === null || typeof entry !== 'object') continue;
+    const id = typeof entry.id === 'string' ? entry.id.trim() : '';
+    if (id === '') continue;
+    const label = typeof entry.label === 'string' && entry.label.trim() !== '' ? entry.label.trim() : id;
+    const note = typeof entry.note === 'string' ? entry.note.trim() : '';
+    byId.set(id, { id, label, note });
+  }
+  return [...byId.values()];
+}
+
+/** 目录里没有 id 时是否允许模型随便传：`voices` 为空表示「不校验」。 */
+const catalogEmpty = (cfg) => !Array.isArray(cfg.voices) || cfg.voices.length === 0;
+
+/**
+ * 决定这次用哪个音色。
+ *
+ * 模型拿到的是「id 或别名（label）」，两种都认：它看到的是 label，但真正要传给服务端的是 id。
+ * 目录非空时**只认目录里的**——这样模型编 id 时会得到可读拒绝，而不是一次 400。
+ *
+ * @param {ReturnType<typeof readConfig>} cfg
+ * @param {unknown} requested 模型传的 voice（可为空）
+ * @returns {{ok: true, voice: string, source: 'requested'|'alias'|'default'|'passthrough'} | {ok: false, error: string}}
+ */
+export function resolveVoice(cfg, requested) {
+  const asked = typeof requested === 'string' ? requested.trim() : '';
+  if (asked === '') {
+    return { ok: true, voice: cfg.ttsVoice, source: cfg.ttsVoice === '' ? 'passthrough' : 'default' };
+  }
+  if (catalogEmpty(cfg)) return { ok: true, voice: asked, source: 'passthrough' };
+
+  const byId = cfg.voices.find((v) => v.id === asked);
+  if (byId !== undefined) return { ok: true, voice: byId.id, source: 'requested' };
+
+  const byLabel = cfg.voices.find((v) => v.label === asked);
+  if (byLabel !== undefined) return { ok: true, voice: byLabel.id, source: 'alias' };
+
+  const options = cfg.voices.map((v) => `${v.label}（${v.id}）`).join('、');
+  return { ok: false, error: `音色「${asked}」不在可选目录里。可选：${options}` };
+}
+
+/**
+ * 按 seedMode 决定这次用哪个 seed。**永远返回一个合法整数**，
+ * 所以调用方不需要再判空（服务端也就不用猜"没传 seed"是什么意思）。
+ *
+ * @param {ReturnType<typeof readConfig>} cfg
+ * @param {unknown} requested 模型传的 seed（可为空）
+ * @param {() => number} [random] 注入随机源，测试用
+ * @returns {{seed: number, source: 'model'|'fixed'|'random'}}
+ */
+export function resolveSeed(cfg, requested, random = Math.random) {
+  // 注意是「乘」不是「取模」：random() 落在 [0,1)，对它取模得到的还是它自己，
+  // 再 floor 就永远是 0（这个 bug 被单测逮到过）。取小数部分再放大到 [0, SEED_LIMIT)。
+  const pickRandom = () => {
+    const value = Number(random());
+    const unit = Number.isFinite(value) ? Math.abs(value) % 1 : 0;
+    return Math.floor(unit * SEED_LIMIT);
+  };
+  if (cfg.seedMode === 'fixed') return { seed: normalizeSeed(cfg.defaultSeed), source: 'fixed' };
+  if (cfg.seedMode === 'random') return { seed: pickRandom(), source: 'random' };
+  // model：模型给了合法值就用；没给/非法就随机（这样每条语音的语气仍然会变）
+  const asked = typeof requested === 'number' || typeof requested === 'string' ? Number(requested) : NaN;
+  if (Number.isInteger(asked) && asked >= 0 && asked < SEED_LIMIT) return { seed: asked, source: 'model' };
+  return { seed: pickRandom(), source: 'random' };
+}
+
+/**
  * 读出**当前**配置（每次调用一次，天然拿到热改后的值）。
  *
  * @param {unknown} rawConfig 插件收到的原始配置（volatile 字段可能是引用）
@@ -173,6 +297,9 @@ export function readConfig(rawConfig) {
     ttsBaseUrl: str(plain.ttsBaseUrl, DEFAULT_CONFIG.ttsBaseUrl),
     ttsModel: str(plain.ttsModel, DEFAULT_CONFIG.ttsModel),
     ttsVoice: str(plain.ttsVoice, DEFAULT_CONFIG.ttsVoice),
+    voices: normalizeVoices(plain.voices),
+    seedMode: SEED_MODES.includes(plain.seedMode) ? plain.seedMode : DEFAULT_CONFIG.seedMode,
+    defaultSeed: normalizeSeed(plain.defaultSeed, DEFAULT_CONFIG.defaultSeed),
     apiKey: str(plain.apiKey, DEFAULT_CONFIG.apiKey),
     apiKeyEnv: str(plain.apiKeyEnv, DEFAULT_CONFIG.apiKeyEnv),
     format: str(plain.format, DEFAULT_CONFIG.format),

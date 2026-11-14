@@ -19,7 +19,25 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
-import { ENTRY, ENTRY_GROUP } from './constants.js';
+import { ENTRY, ENTRY_GROUP, ENTRY_LABEL } from './constants.js';
+
+/**
+ * item id 前缀 -> 条目 id（voice -> - id: dsh-qq-voice）。
+ *
+ * 为什么要这张表：以前这里是「id.startsWith(qqbot.) / whale.」的 if 链，
+ * 加一个新插件要改三处（按 id 解析、按路径反推、写回时兜底）；漏改任何一处，
+ * 新插件的键就会被写进 qq-bot 的段——静默写坏配置，比报错危险得多。
+ */
+const PREFIX_ENTRY = Object.fromEntries(
+  Object.entries(ENTRY_GROUP).map(([entryId, prefix]) => [prefix, entryId]),
+);
+
+/** 从 item id（prefix.key）里拆出前缀与键名；无点号返回 null。 */
+function splitItemId(id) {
+  const dot = typeof id === 'string' ? id.indexOf('.') : -1;
+  if (dot <= 0) return null;
+  return { prefix: id.slice(0, dot), key: id.slice(dot + 1) };
+}
 import { readEntryItems, readItemBlock, writeItemBlock, labelOf } from './items.js';
 
 export { ENTRY };
@@ -273,7 +291,7 @@ export function collectItems(paths) {
       group: prefix,
       entryId,
       present: scanned.present === true,
-      label: prefix === 'qqbot' ? 'dsh-qq-bot（QQ 机器人）' : 'dsh-qq-whale（工具面收窄）',
+      label: ENTRY_LABEL[entryId] ?? entryId,
       count: groupItems.length,
       note: scanned.present === true
         ? undefined
@@ -713,12 +731,9 @@ export function previewImport({ bundlePath, paths, force = false }) {
       }
 
       let item;
-      if (id !== undefined && id.startsWith('qqbot.')) {
-        const key = id.slice('qqbot.'.length);
-        item = { id, kind: 'section', key, entryId: ENTRY.qqBot };
-      } else if (id !== undefined && id.startsWith('whale.')) {
-        const key = id.slice('whale.'.length);
-        item = { id, kind: 'section', key, entryId: ENTRY.whale };
+      const parsed = id === undefined ? null : splitItemId(id);
+      if (parsed !== null && PREFIX_ENTRY[parsed.prefix] !== undefined) {
+        item = { id, kind: 'section', key: parsed.key, entryId: PREFIX_ENTRY[parsed.prefix] };
       } else if (id === SPECIAL_ITEMS.personaSource) {
         item = { id, kind: 'file' };
       } else if (id === SPECIAL_ITEMS.memoryDb) {
@@ -726,12 +741,10 @@ export function previewImport({ bundlePath, paths, force = false }) {
       } else if (filePath.startsWith('items/') && filePath.endsWith('.yml')) {
         // 没有 id 字段的包：从路径反推
         const raw = filePath.slice('items/'.length, -'.yml'.length);
-        const dot = raw.indexOf('.');
-        const prefix = raw.slice(0, dot);
-        const key = raw.slice(dot + 1);
-        const entryId = prefix === 'qqbot' ? ENTRY.qqBot : (prefix === 'whale' ? ENTRY.whale : undefined);
+        const parsedPath = splitItemId(raw);
+        const entryId = parsedPath === null ? undefined : PREFIX_ENTRY[parsedPath.prefix];
         if (entryId === undefined) { warnings.push(`无法识别的配置项：${filePath}`); continue; }
-        item = { id: raw, kind: 'section', key, entryId };
+        item = { id: raw, kind: 'section', key: parsedPath.key, entryId };
       } else {
         warnings.push(`无法识别的包内条目：${filePath}`);
         continue;
@@ -856,6 +869,10 @@ export function runImport({ bundlePath, paths, write = false, force = false, ite
         try {
           const block = fs.readFileSync(path.join(staging, itemPath(item.id)), 'utf8').replace(/\s+$/, '');
           const entryId = item.entryId ?? entryIdOf(item.id);
+          if (entryId === undefined) {
+            failed.push({ id: item.id, error: '无法判断这一项属于哪个插件段（item id 前缀没有对应条目），已跳过' });
+            continue;
+          }
           const result = writeItemBlock(text, entryId, item.key, block);
           if (result.ok !== true) { failed.push({ id: item.id, error: result.error ?? '写入失败' }); continue; }
           // 写后自检：把这一项再读回来，必须与预期块逐字一致。
@@ -936,7 +953,13 @@ export function runImport({ bundlePath, paths, write = false, force = false, ite
   }
 }
 
-/** item id → 条目 id（写回配置时用）。 */
+/**
+ * item id -> 条目 id（写回配置时用）。
+ *
+ * 未知前缀返回 undefined，调用方必须当失败处理：以前这里兜底成 qq-bot，
+ * 结果是一个新插件的键被写进 qq-bot 段——静默写坏配置。
+ */
 function entryIdOf(id) {
-  return id.startsWith('whale.') ? ENTRY.whale : ENTRY.qqBot;
+  const parsed = splitItemId(id);
+  return parsed === null ? undefined : PREFIX_ENTRY[parsed.prefix];
 }
