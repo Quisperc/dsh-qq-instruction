@@ -91,29 +91,38 @@ test('hideTools：白名单未注册齐全时跳过（绝不缩表）', () => {
 });
 
 // ---------------------------------------------------------------- pre-step
-test('hideToolsAtFirstStep：首个 pre-step 隐藏成功后解绑，不重复执行', async () => {
-  const names = [...DEFAULT_ALLOW, 'bash'];
+test('hideToolsAtFirstStep：名单不变不重复 restrict，名单变了才重新应用', async () => {
+  // 回归：QQ agent 长期存活，白名单变了必须能重新生效（2026-11-15 qq_voice 不可用事故）。
+  let allowNow = [...DEFAULT_ALLOW];
   let restricted = 0;
-  let disposed = 0;
   let handler = null;
+  const names = () => [...allowNow, 'bash'];
   const agent = {
     id: 'qqbot-1',
     ctx: {
-      get: () => ({ definitions: () => names.map((n) => ({ name: n })), restrict: () => { restricted += 1; } }),
+      get: () => ({ definitions: () => names().map((n) => ({ name: n })), restrict: () => { restricted += 1; } }),
       on: (event, fn) => {
         if (event === 'agent/pre-step') handler = fn;
-        return () => { disposed += 1; };
+        return () => {};
       },
     },
   };
   const logs = [];
-  assert.equal(hideToolsAtFirstStep(agent, DEFAULT_ALLOW, { logger: { info: (m) => logs.push(m), warn: (m) => logs.push(m) } }), true);
+  const ctx = { logger: { info: (m) => logs.push(m), warn: (m) => logs.push(m) } };
+  const readCfg = () => ({ mode: 'hide', allowTools: allowNow });
+  assert.equal(hideToolsAtFirstStep(agent, DEFAULT_ALLOW, ctx, readCfg), true);
+
   const decision = {};
   assert.equal(await handler({}, async () => decision), decision);
-  assert.equal(restricted, 1);
-  assert.equal(disposed, 1, '成功后应解绑');
+  assert.equal(restricted, 1, '首个 pre-step 应用一次');
+
   await handler({}, async () => decision);
-  assert.equal(restricted, 1, '不应重复 restrict');
+  assert.equal(restricted, 1, '名单没变时不应重复 restrict');
+
+  // 名单新增一项（模拟用户把新工具加进白名单）→ 应当再次应用
+  allowNow = [...DEFAULT_ALLOW, 'qq_voice'];
+  await handler({}, async () => decision);
+  assert.equal(restricted, 2, '名单变化后应重新应用');
 });
 
 test('hideToolsAtFirstStep：热配置切到 guard 后跳过隐藏', async () => {
@@ -196,4 +205,32 @@ test('installAgentGuard：畸形 payload 与缺服务都不抛（串行事件抛
   assert.doesNotThrow(() => handler(undefined));
   assert.doesNotThrow(() => handler({ agent: { id: 'qqbot-x', ctx: { get: () => ({}) } } }));
   assert.doesNotThrow(() => handler({ agent: { id: 'qqbot-y' } }));
+});
+
+test('installGuard：名单每次调用现读，热改后老 agent 立刻生效', async () => {
+  // 回归：QQ agent 长期存活，若名单在安装时被快照，新增的白名单项对老会话永远不可用
+  // （2026-11-15 用户实际报错：工具 qq_voice 不可用）。
+  let guardFn = null;
+  const tools = { guard: (fn) => { guardFn = fn; } };
+  const agent = { id: 'qqbot-1', ctx: { get: () => tools } };
+
+  let allowNow = [...DEFAULT_ALLOW];
+  const readCfg = () => ({ mode: 'hide', allowTools: allowNow });
+
+  assert.equal(installGuard(agent, () => readCfg().allowTools).ok, true);
+
+  // 当前名单里没有 bash → 拒
+  assert.equal(typeof guardFn({ name: 'bash' }), 'string');
+  assert.equal(guardFn({ name: 'qq_draw' }), undefined, '白名单内的工具应放行');
+
+  // 热改：把 pretend 工具加进名单 → 无需重装守卫即可放行
+  allowNow = [...DEFAULT_ALLOW, 'pretend_tool'];
+  assert.equal(guardFn({ name: 'pretend_tool' }), undefined, '名单变化后应立刻放行');
+
+  // 老式数组入参仍然可用（向后兼容）
+  const tools2 = { guard: (fn) => { guardFn = fn; } };
+  const agent2 = { id: 'qqbot-2', ctx: { get: () => tools2 } };
+  assert.equal(installGuard(agent2, ['only_this']).ok, true);
+  assert.equal(guardFn({ name: 'only_this' }), undefined);
+  assert.equal(typeof guardFn({ name: 'anything_else' }), 'string');
 });

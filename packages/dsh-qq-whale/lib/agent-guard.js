@@ -59,8 +59,12 @@ function toolsOf(agent) {
 /**
  * 装执行期拦截：名单外的工具调用直接被拒，并回一句可读的中文。
  *
+ * **名单每次调用现读**，不在安装时快照：QQ 会话的 agent 是长期存活的，
+ * 若把名单 capture 进闭包，改配置（新增/删除白名单项）后老会话永远用旧名单——
+ * 2026-11-15 的「qq_voice 不可用」就是这么来的（agent 建于加白名单之前）。
+ *
  * @param {any} agent 目标 agent
- * @param {string[]} allow 白名单
+ * @param {string[] | (() => string[])} allow 白名单，或返回白名单的函数（推荐后者）
  * @returns {{ ok: boolean, reason?: string }}
  */
 export function installGuard(agent, allow = DEFAULT_ALLOW) {
@@ -68,12 +72,20 @@ export function installGuard(agent, allow = DEFAULT_ALLOW) {
   if (tools === undefined || tools === null) return { ok: false, reason: '拿不到 tools 服务' };
   if (typeof tools.guard !== 'function') return { ok: false, reason: '这个 DSH 版本没有 tools.guard' };
 
-  const allowed = new Set(allow);
+  const resolveAllow = typeof allow === 'function' ? allow : () => allow;
   try {
     tools.guard((exec) => {
       const name = exec !== null && exec !== undefined ? exec.name : undefined;
       // 名字都拿不到的调用一律拒：宁可误拒，也不要放行一个看不见的东西。
       if (typeof name !== 'string') return 'QQ 场景：该工具不可用';
+      let list;
+      try {
+        list = resolveAllow();
+      } catch {
+        // 现读取值失败时退回出厂名单：拦截照旧生效，不会因为读配置出错而全放开。
+        list = DEFAULT_ALLOW;
+      }
+      const allowed = new Set(Array.isArray(list) && list.length > 0 ? list : DEFAULT_ALLOW);
       if (allowed.has(name)) return undefined;
       return `QQ 场景：工具 ${name} 不可用（只允许 QQ 工具、读写、提问/待办与记忆）`;
     });
@@ -130,15 +142,37 @@ export function hideTools(agent, allow = DEFAULT_ALLOW) {
  * @param {() => object} [readCfg] 热配置读取器；给了就每步现读
  * @returns {boolean} 是否挂上钩子
  */
+/** 名单指纹：用来判断「这份名单是不是已经应用到该 agent 上了」。顺序无关。 */
+function signatureOf(list) {
+  return `${list.length}:${[...list].sort().join(',')}`;
+}
+
+/**
+ * 把名单外的工具从**可见列表**里摘掉。
+ *
+ * 为什么每个 pre-step 都要跑、而不是只在首步跑一次：
+ *   QQ 会话的 agent 长期存活，而白名单会变（新增工具、用户改配置）。只在首步应用的话，
+ *   后来加进白名单的工具对老会话**永远不可见**——2026-11-15「qq_voice 不可用」就是这个症状的
+ *   另一半（守卫拒调用 + 可见列表里没有它）。这里按「名单指纹」去重：名单没变就立刻返回，
+ *   变了才重新 restrict，既有热更新又不会每步都动工具表。
+ *
+ * @param {any} agent 目标 agent
+ * @param {string[]} allow 白名单（readCfg 不可用时的回退）
+ * @param {any} pluginCtx 插件上下文（只用于日志）
+ * @param {() => any} [readCfg] 现读配置；返回 undefined 表示按静态名单处理
+ * @returns {boolean} 是否成功挂上钩子
+ */
 export function hideToolsAtFirstStep(agent, allow, pluginCtx, readCfg) {
   const agentCtx = agent !== null && agent !== undefined ? agent.ctx : undefined;
   if (agentCtx === undefined || agentCtx === null || typeof agentCtx.on !== 'function') return false;
 
-  let done = false;
+  /** 上一次成功应用到该 agent 的名单指纹；undefined = 还没成功过。 */
+  let applied = null;
+  let disposed = false;
   let dispose;
   try {
     dispose = agentCtx.on('agent/pre-step', async (_payload, next) => {
-      if (!done) {
+      if (!disposed) {
         try {
           const live = typeof readCfg === 'function' ? readCfg() : undefined;
           // 热配置：切回 guard/off 后不再隐藏（已隐藏的不会自动恢复，重开会话才彻底）。
@@ -147,16 +181,19 @@ export function hideToolsAtFirstStep(agent, allow, pluginCtx, readCfg) {
             ? live.allowTools
             : allow;
           if (!shouldHide) {
-            done = true;
+            disposed = true;
             pluginCtx?.logger?.info?.('[dsh-qq-whale] mode 已不是 hide，跳过隐藏（只保留执行期拦截）');
             if (typeof dispose === 'function') dispose();
             return next();
           }
-          const result = hideTools(agent, allowNow);
-          if (result.ok) {
-            done = true;
-            pluginCtx?.logger?.info?.(`[dsh-qq-whale] 工具面已隐藏（${result.hidden} 个不可见）`);
-            if (typeof dispose === 'function') dispose();
+          const sig = signatureOf(Array.isArray(allowNow) ? allowNow : allow);
+          if (applied !== sig) {
+            const result = hideTools(agent, allowNow);
+            if (result.ok) {
+              applied = sig;
+              pluginCtx?.logger?.info?.(`[dsh-qq-whale] 工具面已隐藏（${result.hidden} 个不可见）`);
+            }
+            // 失败不置位：下个 pre-step 再试（通常是因为工具还没注册齐）
           }
         } catch (error) {
           pluginCtx?.logger?.warn?.(`[dsh-qq-whale] 隐藏失败（下个回合再试）：${error?.message || error}`);
@@ -204,7 +241,8 @@ export function installAgentGuard(ctx, options = {}) {
           return;
         }
 
-        const installed = installGuard(agent, cfg.allowTools);
+        // 传函数而不是数组：QQ agent 长期存活，名单必须每次调用现读（否则改白名单对老会话无效）
+        const installed = installGuard(agent, () => readCfg().allowTools);
         if (installed.ok) ctx.logger?.info?.(`[dsh-qq-whale] 已装执行期拦截（agent ${String(agent.id)}）`);
         else ctx.logger?.warn?.(`[dsh-qq-whale] 拦截安装失败（${installed.reason}），该会话按未限制继续`);
 
