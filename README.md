@@ -166,4 +166,11 @@ qqbot/
 
 ## 许可与署名
 
-人格形象基于「溟月：上善无形」与 ZipZipPipe 的设计，协议 **CC BY-NC-SA 4.0**（署名 / 非商业 / 相同方式共享）。对外运行时应声明「AI 自动回复、非官方」。
+本项目**双许可**，按内容划界：
+
+| 内容 | 许可 | 文件 |
+|---|---|---|
+| 代码、脚本、配置、文档（`packages/` `scripts/` `docs/` `market/` 等） | **MIT** | [LICENSE](./LICENSE) |
+| 人格形象与人格卡（`persona/`、配置里的 `persona.text`） | **CC BY-NC-SA 4.0**（署名 / 非商业 / 相同方式共享） | [LICENSE-PERSONA](./LICENSE-PERSONA) |
+
+人格形象基于「溟月：上善无形」与 ZipZipPipe 的设计；**商业化使用前必须先取得原作者授权**。对外运行时应声明「AI 自动回复、非官方」。

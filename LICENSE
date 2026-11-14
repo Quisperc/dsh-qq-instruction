@@ -1,32 +1,33 @@
-# 许可声明
-
-本项目包含两类内容，适用不同许可。
-
-## 1. 配置、脚本、文档（本仓库原创部分）
-
 MIT License
 
-你可以自由使用、修改、分发，无需署名，不承担任何担保责任。
+Copyright (c) 2026 Quisperc
 
-## 2. 人格形象与人格卡（persona/whale.md）
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
 
-人格形象基于 **「溟月：上善无形」** 与 **ZipZipPipe** 的设计，
-原始协议为 **CC BY-NC-SA 4.0**（署名 / 非商业 / 相同方式共享）。
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
 
-你必须：
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 
-- **署名**：注明形象来源与原作者
-- **非商业**：不得用于商业目的
-- **相同方式共享**：衍生作品沿用相同协议
-- **声明**：对外运行时应标注「AI 自动回复、非官方」
+---
 
-商业化使用前，请先取得原作者授权——该协议下商业使用无法通过付绕开。
+本 MIT 许可适用于本仓库的代码、脚本、配置与文档（`packages/`、`scripts/`、
+`docs/`、`config/`、`market/`、根目录各 Markdown 文件）。
 
-## 3. 第三方组件
+**不适用**于人格形象与人格卡文本（`persona/`、以及 `cordis.patch.yml` 里
+`dsh-qq-bot.config.persona.*` 的文本内容）——它们适用
+[LICENSE-PERSONA](./LICENSE-PERSONA) 的 CC BY-NC-SA 4.0。
 
-| 组件 | 许可 |
-|---|---|
-| `@sputnikzaychik/dsh-qq-bot` | 见其仓库 LICENSE |
-| DeepSeek Harness (DSH) | 见官方许可 |
-| NapCat | 见其仓库 LICENSE |
-| DashScope / 阿里百炼 | 服务条款（非开源） |
+第三方组件（`@sputnikzaychik/dsh-qq-bot`、DeepSeek Harness、NapCat、DashScope 等）
+各依其自身许可，见 [LICENSE-PERSONA](./LICENSE-PERSONA) 末节。

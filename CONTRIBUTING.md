@@ -52,7 +52,8 @@ qqbot/
 ├── README.md              项目唯一入口，只做导航，不写细节
 ├── ./CONTRIBUTING.md        本文
 ├── ./CHANGELOG.md           每次变更必须记一笔
-├── LICENSE
+├── LICENSE                 MIT（代码/脚本/配置/文档）
+├── LICENSE-PERSONA         CC BY-NC-SA 4.0（人格形象与人格卡）
 ├── .gitignore
 ├── docs/                  文档（按 Diátaxis 四象限，见 §2）
 │   ├── README.md          文档索引
