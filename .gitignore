@@ -43,3 +43,6 @@ config/cordis.patch.yml
 # 市场索引：只提交 market/index.json（由 scripts/make-market-index.mjs --write 生成）；
 # 本地试验/临时改过的变体（index.local.json 等）不要入库，免得被当成正式索引托管。
 market/index.*.json
+
+# 1.8MB 未使用音频样本（TTS 未实现，属调试产物）
+samples/
