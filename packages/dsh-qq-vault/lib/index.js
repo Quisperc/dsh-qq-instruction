@@ -22,11 +22,13 @@ import fsPromises from 'node:fs/promises';
 import path from 'node:path';
 import {
   ERROR_CODES,
-  INCLUDE_KEYS,
+  SPECIAL_ITEMS,
   SKIPPED,
   cleanupBundles,
+  collectItems,
   failure,
   listBundles,
+  parseItemIds,
   planExport,
   previewImport,
   resolvePaths,
@@ -135,11 +137,14 @@ function queryOf(req) {
   }
 }
 
-/** `?include=config,persona` → 数组；空值返回 undefined（= 全部）。 */
-function includeOf(params) {
-  const raw = params.get('include');
+/**
+ * `?items=qqbot.onebot,qqbot.group` → 数组；空值返回 undefined（= 全部）。
+ * 0.5.0 起用 item id 取代原来的 include 键（config/persona/memory/whaleConfig）。
+ */
+function itemsOf(params) {
+  const raw = params.get('items');
   if (raw === null || raw === '') return undefined;
-  return raw.split(',').map((item) => item.trim()).filter(Boolean);
+  return parseItemIds(raw);
 }
 
 /** 把 `?path=` 解析成绝对路径：纯文件名落到 backups/qqbot-vault 下。 */
@@ -173,12 +178,17 @@ function sendFile(res, filePath, fileName) {
  * 一次性确认码：preview-import 发放，import 消费。
  * 内存 Map，5 分钟过期，只能用一次；进程重启即失效（导入本就该人工在场）。
  *
+ * 0.5.0 起额外绑定**预览时的 item 集合**：
+ *   - 换包 → path 不匹配，拒绝；
+ *   - 要应用一个没预览过的项 → 集合校验拒绝（不许"预览 3 项、实际写第 4 项"）；
+ *   - 应用**子集**是允许的（比预览更少永远更安全，也符合"只勾我要的"这个用法）。
+ *
  * 为什么要记 `used`：0.2.0 把「不存在」和「已用过」混成同一句提示，
  * 用户按提示重新预览却不知道之前那次其实已经执行过。分开记之后
  * 错误码能准确区分 expired / used / mismatch / invalid。
  */
 function createTokenStore() {
-  /** @type {Map<string, { path: string, expiresAt: number }>} */
+  /** @type {Map<string, { path: string, items: string[], expiresAt: number }>} */
   const tokens = new Map();
   /** @type {Map<string, { path: string, usedAt: number }>} */
   const used = new Map();
@@ -198,19 +208,24 @@ function createTokenStore() {
   };
 
   return {
-    issue(bundlePath, now = Date.now()) {
+    issue(bundlePath, items, now = Date.now()) {
       sweep(now);
       const token = crypto.randomUUID();
-      tokens.set(token, { path: bundlePath, expiresAt: now + TOKEN_TTL_MS });
+      tokens.set(token, {
+        path: bundlePath,
+        items: Array.isArray(items) ? [...items].sort() : [],
+        expiresAt: now + TOKEN_TTL_MS,
+      });
       return token;
     },
     /**
      * 校验并消费。
+     * @param {string} token
+     * @param {string} bundlePath
+     * @param {string[]} [items] 本次要应用的项（undefined = 预览时的全部）
      * @returns {{ code?: string, message?: string }}
-     *   - `{}`：通过
-     *   - `{ code, message }`：失败（结构化，供客户端映射中文）
      */
-    consume(token, bundlePath, now = Date.now()) {
+    consume(token, bundlePath, items, now = Date.now()) {
       if (token === undefined || token === null || token === '') {
         return { code: ERROR_CODES.tokenMissing, message: '缺少一次性确认码（先点「预览」获取）' };
       }
@@ -243,6 +258,17 @@ function createTokenStore() {
       if (entry.path !== bundlePath) {
         // 不消费：用户可能只是把路径填错了，改回来还能继续用
         return { code: ERROR_CODES.tokenMismatch, message: '确认码与目标文件不匹配；请对着同一个文件重新预览' };
+      }
+      if (Array.isArray(items) && items.length > 0) {
+        const allowed = new Set(entry.items);
+        const extra = items.filter((id) => !allowed.has(id));
+        if (extra.length > 0) {
+          // 不消费：补一次预览就能拿到覆盖这些项的新码
+          return {
+            code: ERROR_CODES.tokenMismatch,
+            message: `这些项没有在预览里出现过：${extra.join(', ')}；请重新预览后再导入`,
+          };
+        }
       }
       tokens.delete(token);
       used.set(token, { path: bundlePath, usedAt: now });
@@ -397,24 +423,39 @@ export function apply(ctx, rawConfig) {
   } catch { uploadSupported = false; }
 
   const routes = [
-    // 能力清单：UI 用它渲染复选框、「未实现」项与「备份放哪」的绝对路径
+    // 能力清单：UI 用它渲染分组、勾选项与「备份放哪」的绝对路径
     ['exact', `${ROUTE_PREFIX}/capabilities`, route(async (req, res) => {
       const paths = resolve();
+      const scanned = collectItems(paths);
       json(res, 200, {
         ok: true,
-        include: INCLUDE_KEYS,
+        granular: true,
+        itemsEndpoint: `${ROUTE_PREFIX}/items`,
+        groups: scanned.groups,
         skipped: Object.entries(SKIPPED).map(([key, meta]) => ({ key, ...meta })),
-        sensitive: { config: true, memory: true, persona: false, whaleConfig: false },
         // 说清楚每一项到底备份的是什么，避免再出现「备份了人格卡却没生效」的误解
         effective: {
-          persona: 'config.persona.text',
-          config: 'cordis-qq-bot 段（含 token / QQ 号 / 人格）',
+          persona: 'config 里的 persona 块（含 persona.text，导入时整块写回配置）',
+          config: 'dsh-qq-bot 段的各个一级配置项（token / QQ 号 / 群号在各自项里）',
           memory: 'QQ_msg/.dsh-meow/memory.db',
-          whaleConfig: 'dsh-qq-whale 段',
+          whaleConfig: 'dsh-qq-whale 段的各个一级配置项',
         },
         backupDir: paths.backupDir,
         upload: { supported: uploadSupported, path: `/api${ROUTE_PREFIX}/upload` },
         tokenTtlSeconds: Math.floor(TOKEN_TTL_MS / 1000),
+        specialItems: SPECIAL_ITEMS,
+      });
+    })],
+
+    // 当前机器上可导出的全部配置项（逐项，动态发现）
+    ['exact', `${ROUTE_PREFIX}/items`, route(async (req, res) => {
+      const paths = resolve();
+      const scanned = collectItems(paths);
+      json(res, 200, {
+        ok: true,
+        items: scanned.items.map(({ block, ...rest }) => rest),
+        groups: scanned.groups,
+        warnings: scanned.warnings,
       });
     })],
 
@@ -440,13 +481,13 @@ export function apply(ctx, rawConfig) {
 
     // 只算不写
     ['exact', `${ROUTE_PREFIX}/plan`, route(async (req, res) => {
-      json(res, 200, planExport({ include: includeOf(queryOf(req)), paths: resolve() }));
+      json(res, 200, planExport({ items: itemsOf(queryOf(req)), paths: resolve() }));
     })],
 
     // 生成并直接流式下载（浏览器带 cookie，能过 browserAuth）
     ['exact', `${ROUTE_PREFIX}/export`, route(async (req, res) => {
       const params = queryOf(req);
-      const result = runExport({ include: includeOf(params), paths: resolve() });
+      const result = runExport({ items: itemsOf(params), paths: resolve() });
       if (result.ok !== true) {
         json(res, 400, failure(ERROR_CODES.badRequest, result.error ?? '导出失败', { plan: result.plan }));
         return;
@@ -454,7 +495,7 @@ export function apply(ctx, rawConfig) {
       sendFile(res, result.path, path.basename(result.path));
     })],
 
-    // 预览 + 发放一次性确认码
+    // 预览逐项差异 + 发放一次性确认码（码绑定 path + 本次预览的 item 集合）
     ['exact', `${ROUTE_PREFIX}/preview-import`, route(async (req, res) => {
       const params = queryOf(req);
       const paths = resolve();
@@ -475,12 +516,12 @@ export function apply(ctx, rawConfig) {
       json(res, 200, {
         ...result,
         path: bundlePath,
-        token: tokens.issue(bundlePath),
+        token: tokens.issue(bundlePath, result.itemIds ?? []),
         tokenTtlSeconds: Math.floor(TOKEN_TTL_MS / 1000),
       });
     })],
 
-    // 凭 token 真正执行；write=1 必须显式给
+    // 凭 token 真正执行；write=1 必须显式给；items= 只应用勾选的项
     ['exact', `${ROUTE_PREFIX}/import`, route(async (req, res) => {
       const params = queryOf(req);
       const paths = resolve();
@@ -493,7 +534,8 @@ export function apply(ctx, rawConfig) {
         json(res, 400, failure(ERROR_CODES.writeRequired, '导入必须显式 write=1（先预览再确认）'));
         return;
       }
-      const verdict = tokens.consume(params.get('token') ?? '', bundlePath);
+      const wantItems = itemsOf(params);
+      const verdict = tokens.consume(params.get('token') ?? '', bundlePath, wantItems);
       if (verdict.code !== undefined) {
         json(res, 400, failure(verdict.code, verdict.message));
         return;
@@ -503,7 +545,7 @@ export function apply(ctx, rawConfig) {
         paths,
         write: true,
         force: params.get('force') === '1',
-        include: includeOf(params),
+        items: wantItems,
       });
       // 一次性码已消费：无论成败都要重新预览，避免"重试即生效"的误用
       json(res, result.ok === true ? 200 : 400, result);

@@ -1,10 +1,10 @@
 /**
  * 人格备份的回归测试（对应用户实际反馈：人格卡备份了但导入后不生效）。
  *
- * 关键语义：
- *   导出要取 **cordis.patch.yml 里 dsh-qq-bot.config.persona.text**（生效值），
- *   而不是仓库里的 persona/whale.md（源文件）；
- *   导入要把这份文本**写回配置**，而不是只把文件丢到仓库目录。
+ * 0.5.0 之后语义变了：人格不再是单独的 `persona/persona.text` 文件，
+ * 而是**配置项 `qqbot.persona`**（就是 `config.persona` 那个块，里面含 persona.text）。
+ * 因此「写回配置」不再是特殊路径，而是逐项导入的天然结果——但仍然必须有测试锁住，
+ * 因为这是用户真正踩过的坑。
  *
  * 所有用例都在 /tmp 的合成目录里跑，绝不碰真实 profile。
  */
@@ -15,10 +15,10 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { planExport, previewImport, resolvePaths, runExport, runImport } from '../lib/bundle.js';
-import { extractPersonaText } from '../lib/persona.js';
+import { previewImport, resolvePaths, runExport, runImport } from '../lib/bundle.js';
+import { readItemBlock } from '../lib/items.js';
+import { ENTRY } from '../lib/bundle.js';
 
 /** 源机器的配置：人格文本是「配置里的生效值」，与仓库文件故意不同。 */
 const SOURCE_PATCH = `- id: dsh-qq-bot
@@ -39,7 +39,7 @@ const SOURCE_PATCH = `- id: dsh-qq-bot
   name: '@perrylink/dsh-github'
 `;
 
-/** 目标机器的配置：人格是另一份，用来验证「被覆盖」。 */
+/** 目标机器的配置：人格是另一份，用来验证「被覆盖」；传输配置不同，用来验证「不被顺手改掉」。 */
 const TARGET_PATCH = `- id: dsh-qq-bot
   name: '@sputnikzaychik/dsh-qq-bot'
   config:
@@ -76,39 +76,56 @@ function makeTree(root, patch, opts = {}) {
   return resolvePaths({ home: root, profile: 'web', workspace, repoRoot });
 }
 
-test('导出：persona 取的是配置里的生效文本，不是仓库文件', () => {
+test('导出：qqbot.persona 带的是配置里的生效人格，不是仓库文件', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'vault-p-src-'));
+  const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vault-p-out-'));
   try {
     const paths = makeTree(root, SOURCE_PATCH, { repoPersona: '# 仓库里的旧文案\n' });
-    const plan = planExport({ include: ['persona'], paths });
-    assert.equal(plan.ok, true);
-    const entry = plan.files.find((f) => f.path === 'persona/persona.text');
-    assert.ok(entry, `应包含 persona/persona.text，实际：${plan.files.map((f) => f.path).join(',')}`);
-    assert.equal(entry.effective, 'config.persona.text');
-    assert.ok(entry.chars > 0);
-    // 仓库源文件仍作为副本存在
-    assert.ok(plan.files.some((f) => f.path === 'persona/whale.md'));
+    const exported = runExport({ items: ['qqbot.persona'], paths, outDir });
+    assert.equal(exported.ok, true, exported.error);
+
+    const staging = fs.mkdtempSync(path.join(os.tmpdir(), 'vault-p-x-'));
+    try {
+      execFileSync('tar', ['xzf', exported.path, '-C', staging], { stdio: 'ignore' });
+      const block = fs.readFileSync(path.join(staging, 'items', 'qqbot.persona.yml'), 'utf8');
+      assert.match(block, /生效人格（来自配置）/, '必须是配置里的生效文本');
+      assert.doesNotMatch(block, /仓库里的旧文案/, '不能拿仓库源文件冒充生效人格');
+      assert.match(block, /^persona:/m, '块从 persona: 开始');
+    } finally {
+      fs.rmSync(staging, { recursive: true, force: true });
+    }
   } finally {
-    fs.rmSync(root, { recursive: true, force: true });
+    for (const dir of [root, outDir]) fs.rmSync(dir, { recursive: true, force: true });
   }
 });
 
-test('导出：配置里没有 persona.text 时只带源文件并给出 warning', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'vault-p-notext-'));
+test('导出：人格源文件是独立 item（persona.source），与配置项互不替代', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'vault-p-src3-'));
+  const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vault-p-out3-'));
   try {
-    const noText = SOURCE_PATCH.replace(/ {6}text: \|\n {8}# 生效人格（来自配置）\n {8}你叫大肥鱼，不是助手。\n/, '');
-    const paths = makeTree(root, noText);
-    const plan = planExport({ include: ['persona'], paths });
-    assert.equal(plan.ok, true);
-    assert.ok(!plan.files.some((f) => f.path === 'persona/persona.text'));
-    assert.ok(plan.files.some((f) => f.path === 'persona/whale.md'));
-    assert.ok(plan.warnings.some((w) => w.includes('persona.text')), `warnings: ${plan.warnings.join(' | ')}`);
+    const paths = makeTree(root, SOURCE_PATCH, { repoPersona: '# 仓库源\n' });
+    const exported = runExport({ items: ['persona.source'], paths, outDir });
+    assert.equal(exported.ok, true, exported.error);
+    assert.deepEqual(exported.files.map((file) => file.path), ['persona/whale.md']);
   } finally {
-    fs.rmSync(root, { recursive: true, force: true });
+    for (const dir of [root, outDir]) fs.rmSync(dir, { recursive: true, force: true });
   }
 });
 
-test('全链路：导出 → 预览 → 导入，人格写回**配置**而不是只落文件', () => {
+test('导出：仓库没有人格源文件时，只是少一个可选项（不报错）', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'vault-p-nosrc-'));
+  const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vault-p-out4-'));
+  try {
+    const paths = makeTree(root, SOURCE_PATCH, { repoPersona: null });
+    const exported = runExport({ items: ['qqbot.persona'], paths, outDir });
+    assert.equal(exported.ok, true, exported.error);
+    assert.deepEqual(exported.files.map((file) => file.id), ['qqbot.persona']);
+  } finally {
+    for (const dir of [root, outDir]) fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('全链路：只导入 qqbot.persona → 人格写回配置，传输配置与其它条目一字不改', () => {
   const srcRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'vault-p-src2-'));
   const dstRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'vault-p-dst2-'));
   const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vault-p-out2-'));
@@ -116,27 +133,29 @@ test('全链路：导出 → 预览 → 导入，人格写回**配置**而不是
     const src = makeTree(srcRoot, SOURCE_PATCH);
     const dst = makeTree(dstRoot, TARGET_PATCH, { repoPersona: null });
 
-    const exported = runExport({ include: ['persona'], paths: src, outDir });
+    const exported = runExport({ items: ['qqbot.persona'], paths: src, outDir });
     assert.equal(exported.ok, true, exported.error);
 
     const preview = previewImport({ bundlePath: exported.path, paths: dst });
     assert.equal(preview.ok, true, preview.error);
-    const personaChange = preview.changes.find((c) => c.key === 'persona');
-    assert.ok(personaChange, '预览应包含 persona 变更');
-    assert.equal(personaChange.target, dst.patchPath, '人格应写回配置，而不是仓库文件');
-    assert.match(personaChange.note, /persona\.text/);
+    const personaItem = preview.items.find((item) => item.id === 'qqbot.persona');
+    assert.ok(personaItem, `预览应包含 qqbot.persona，实际：${preview.items.map((i) => i.id).join(',')}`);
+    assert.equal(personaItem.action, 'replace');
+    assert.equal(personaItem.changed, true);
 
-    const imported = runImport({ bundlePath: exported.path, paths: dst, write: true });
+    const imported = runImport({ bundlePath: exported.path, paths: dst, write: true, items: ['qqbot.persona'] });
     assert.equal(imported.ok, true, imported.error);
+    assert.equal(imported.failed.length, 0, JSON.stringify(imported.failed));
 
     // 目标配置里的人格已被替换成源机器那份
     const after = fs.readFileSync(dst.patchPath, 'utf8');
-    const read = extractPersonaText(after);
-    assert.equal(read.ok, true);
-    assert.match(read.text, /生效人格（来自配置）/);
-    assert.doesNotMatch(read.text, /旧人格/);
-    // 其它配置没被动
+    const personaBlock = readItemBlock(after, ENTRY.qqBot, 'persona');
+    assert.ok(personaBlock !== undefined, '配置里应能读回 persona 块');
+    assert.match(personaBlock, /生效人格（来自配置）/);
+    assert.doesNotMatch(personaBlock, /旧人格/);
+    // 其它配置没被动（这是「逐项」的核心承诺）
     assert.match(after, /wss:\/\/target\.invalid/, '导入人格不应改传输配置');
+    assert.match(after, /accessToken: OLD/, 'token 不该被顺手改掉');
     assert.match(after, /- id: dsh-github/);
     // 导入前的备份存在
     const backups = fs.readdirSync(dst.profileDir).filter((n) => n.includes('.bak-vault-'));
@@ -146,25 +165,22 @@ test('全链路：导出 → 预览 → 导入，人格写回**配置**而不是
   }
 });
 
-test('旧包兼容：只有 persona/whale.md 时，把它当作 persona.text 写回配置并给 warning', () => {
+test('旧格式包（0.4.0 及以前，只有 files 没有 items）：拒绝猜测，给出明确提示', () => {
   const srcRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'vault-legacy-src-'));
   const dstRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'vault-legacy-dst-'));
   const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vault-legacy-out-'));
   try {
-    // 造一个旧格式包：直接手写 tar，内含 persona/whale.md 与最小 manifest
+    // 造一个旧格式包：persona/persona.text + persona/whale.md + 最小 manifest（无 items）
     const staging = fs.mkdtempSync(path.join(os.tmpdir(), 'vault-legacy-stage-'));
     fs.mkdirSync(path.join(staging, 'persona'), { recursive: true });
-    const legacyContent = '# 旧包里的人格\n老文案\n';
-    fs.writeFileSync(path.join(staging, 'persona', 'whale.md'), legacyContent, 'utf8');
-    // 旧包也得有 manifest（否则 openBundle 会当它不是本插件的包直接拒掉）
-    const digest = crypto.createHash('sha256').update(Buffer.from(legacyContent, 'utf8')).digest('hex');
+    fs.writeFileSync(path.join(staging, 'persona', 'persona.text'), '# 旧包里的人格\n老文案\n', 'utf8');
     fs.writeFileSync(path.join(staging, 'manifest.json'), JSON.stringify({
       schemaVersion: 1,
       kind: 'qqbot-vault-bundle',
       exportedAt: new Date().toISOString(),
       dsh: { version: '0.2.2-rc.3', home: '/tmp', profile: 'web' },
       include: ['persona'],
-      files: [{ path: 'persona/whale.md', sha256: digest, bytes: Buffer.byteLength(legacyContent) }],
+      files: [{ path: 'persona/persona.text', bytes: 12 }],
     }, null, 2), 'utf8');
     const bundlePath = path.join(outDir, 'qqbot-vault-legacy.tar.gz');
     execFileSync('tar', ['czf', bundlePath, '-C', staging, '.'], { stdio: 'ignore' });
@@ -173,20 +189,16 @@ test('旧包兼容：只有 persona/whale.md 时，把它当作 persona.text 写
     const dst = makeTree(dstRoot, TARGET_PATCH, { repoPersona: null });
     const preview = previewImport({ bundlePath, paths: dst });
     assert.equal(preview.ok, true, preview.error);
-    if (preview.version?.blocked === true) {
-      // 没有 manifest 的包会被版本闸拦住；用 force 走兼容
-      assert.ok(true);
-      return;
-    }
-    const personaChange = preview.changes.find((c) => c.key === 'persona');
-    assert.ok(personaChange);
-    assert.equal(personaChange.legacy, true);
-    assert.ok(preview.warnings.some((w) => w.includes('旧格式')));
+    assert.ok(
+      preview.warnings.some((w) => w.includes('0.4.0')),
+      `应提示这是旧格式，实际警告：${preview.warnings.join(' | ')}`,
+    );
+    assert.equal(preview.items.length, 0, '旧格式不猜结构，因此没有可应用项');
 
     const imported = runImport({ bundlePath, paths: dst, write: true, force: true });
-    assert.equal(imported.ok, true, imported.error);
-    const after = extractPersonaText(fs.readFileSync(dst.patchPath, 'utf8'));
-    assert.match(after.text, /旧包里的人格/);
+    assert.equal(imported.ok, false, '没有可应用项时应当失败而不是假装成功');
+    // 配置没被动
+    assert.match(fs.readFileSync(dst.patchPath, 'utf8'), /旧人格，应该被覆盖/);
   } finally {
     for (const dir of [srcRoot, dstRoot, outDir]) fs.rmSync(dir, { recursive: true, force: true });
   }

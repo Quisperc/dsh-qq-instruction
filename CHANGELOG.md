@@ -4,6 +4,32 @@
 > 每次改动都要记一笔——**半年后你会想知道当时为什么这么改**。
 > 版本号是**双轨**的（项目本体 + 插件包），规则见 CONTRIBUTING §6。
 
+## [1.23.0] - 2026-11-14（vault v0.5.0 逐项备份 · 适配 qq-bot 0.14.0）
+
+> 两件事：备份不再"整段替换"（改成逐配置项对比 + 多选）；跟随 qq-bot 0.14.0 的识图变化删掉过时规则。
+
+### Changed — dsh-qq-vault v0.5.0
+- **整段替换 → 逐配置项**：配置项 = `config:` 下的一级子键，**动态发现**（真机 20 项，含 0.14.0 新增的 `reply.bubbleGapMinMs`、`sticker.*`），不硬编码清单
+- 新增 `GET /items`；`/plan`、`/export`、`/import` 从 `include=` 改为 **`items=`**，只处理勾选项
+- `/preview-import` 逐项返回 `{action: same|replace|create, changed, current, incoming, sensitive}`
+- 客户端：导出按组多选（敏感项标红），导入显示逐项差异表，**只有变更行可勾**
+- 确认码绑定「路径 + 预览时的 item 集合」：换包拒绝、应用未预览过的项拒绝、应用子集允许
+- 旧格式包（≤0.4.0）拒绝猜测，提示用新版重新导出
+- 新增 `lib/items.js` + `lib/constants.js`；删掉 `lib/persona.js`（能力已并入 items.js，不留重复实现）
+- 测试 86 项（80 通过 / 6 skip）；真机自导入验证：**只应用 1 项时目标配置只有 1 行变化**，注释/缩进/未选中键逐字保留
+
+### Fixed — 逐项写入的两个真 bug
+- `previewImport` 漏返回 `key`/`entryId` → 导入时把已有块当新增插入，**同一项被写两遍**
+- 行内流式 `config: {…}` 会被插入重复 `config:` 键（YAML 直接坏掉）→ 改为明确报错拒绝写坏配置
+- 新增写后自检：写入后回读逐字比对，不一致则该项失败并跳过
+
+### Changed — dsh-qq-whale
+- 删除 preset 里「收到图片先用 read_image 打开原图」的规则：`@sputnikzaychik/dsh-qq-bot` **0.14.0** 起，`vision.provider`/`vision.model` 都留空时图片作为**附件随 user 消息直接提交**，会话模型自己看图，不再需要绕路
+
+### Changed — 其它
+- `scripts/verify-live.mjs` 跟随 `items=` 语义调整断言（仍 15 项全过）
+- 市场索引重新生成（vault 0.5.0）
+
 ## [1.22.0] - 2026-11-14（whale v0.14.0 · vault v0.4.0 · 仓库与配置瘦身）
 
 > 主题：**减法**。砍掉重复实现与调试产物，两个插件各自只保留不可替代的那部分；配置目录只留运行时需要的东西。

@@ -1,8 +1,8 @@
 # dsh-qq-vault
 
-在 DSH 设置页导出/导入 QQBot 的**配置、人设、记忆**——把 `scripts/export-config.mjs` / `import-config.mjs` 的能力搬进界面，并加上完整性校验与清理。
+在 DSH 设置页**按配置项**导出/导入 QQBot 的配置、人设与记忆：导哪项、导给谁，全部由你逐项勾选；导入前逐项对比，只应用你确认的那些——没勾的项与注释一字不改。
 
-> 版本 **0.4.0** · 75 项测试（**69 通过 + 6 项真机检查默认 skip**）· 真机自检 15 项全过（`node scripts/verify-live.mjs`）
+> 版本 **0.5.0** · 86 项测试（**80 通过 + 6 项真机检查默认 skip**）· 仓库真机自检 15 项（`node scripts/verify-live.mjs`）
 >
 > **两条不能忘的平台事实**（0.2.0 踩过）：
 > 1. HTTP 层**只放行 `GET`/`HEAD`**，非 GET 在路由匹配前就 405 → 所有端点只能是 GET + query；
@@ -87,14 +87,37 @@ ln -sfn "$PKG" "$PROFILE/node_modules/dsh-qq-vault"
 
 | 方法 | 路径 | 参数 | 作用 |
 |---|---|---|---|
-| GET | `/capabilities` | — | 可勾选项、未实现项（`supported:false`）、敏感标记、`effective`（每项备份的到底是什么）、`backupDir`、`upload`、`tokenTtlSeconds` |
+| GET | `/capabilities` | — | `granular:true`、`itemsEndpoint`、分组、未实现项（`supported:false`）、`effective`、`backupDir`、`upload`、`tokenTtlSeconds` |
+| GET | `/items` | — | **本机可导出的全部配置项**（`id`/`group`/`label`/`kind`/`sensitive`/`present`/`bytes`）；配置项是动态发现的 |
 | GET | `/list-bundles` | — | 备份目录里本插件的包（`name`/`path`/`bytes`/`mtime`，倒序） |
 | GET | `/cleanup` | `keep=10` `maxAgeDays=` `write=1` | dry-run 或真删；只删本插件命名模式 |
-| GET | `/plan` | `include=config,persona` | 文件清单/大小/警告（**只读**） |
-| GET | `/export` | `include=...` | 生成 tar.gz 并**流式下载**（`Content-Disposition: attachment`） |
-| GET | `/preview-import` | `path=<文件名或绝对路径>` `force=1` | 完整性 + 版本闸 + 将改动的条目；成功返回 `token` |
-| GET | `/import` | `path=...&write=1&token=...` | 校验 token 后备份 + 写入 |
+| GET | `/plan` | `items=a,b,c` | 只统计勾选项的清单/大小/警告（**只读**；空=全部） |
+| GET | `/export` | `items=a,b,c` | 按项生成 tar.gz 并**流式下载**（`Content-Disposition: attachment`） |
+| GET | `/preview-import` | `path=<文件名或绝对路径>` `force=1` | 完整性 + 版本闸 + **逐项**差异（`action`/`changed`/`current`/`incoming`）；成功返回 `token` |
+| GET | `/import` | `path=...&items=a,b,c&write=1&token=...` | 只应用 `items` 里那些项；逐项执行，返回 `applied[]`/`failed[]` |
 | **POST** | **`/api/dsh-qq-vault/upload`** | body=原始字节，`content-type: application/octet-stream` | 上传备份包到 `<backupDir>/uploads/`，返回 `{uploadId, path, bytes}` |
+
+### 为什么不用 YAML 库改配置（重要）
+
+- `yaml`（eemeli，能保注释）只存在于 DSH 自己的 `node_modules` 里，插件运行时**解析不到**；
+- `js-yaml` 会把整份文档重新序列化：注释全丢、行宽与引号风格全变。
+  用户配置里那些「为什么这么写」的注释是资产，不能因为导入一次备份就没了。
+
+所以走**行扫描**（`lib/items.js`，复用 `lib/persona.js` 的思路）：
+按缩进与键名定位 `config:` 下的**一级子键**，整块替换或插入，其余字节原样保留。
+配置项**动态发现**，不硬编码清单——qq-bot 0.14 新增的 `reply.bubbleGapMinMs`、`sticker.*`
+不用改代码就会出现在 `/items` 里。
+
+写入还有一道**写后自检**：写完立刻把该项读回来，与预期块逐字比对；
+不一致（例如手工改包导致缩进坏了）就判该项失败并跳过，绝不把坏 YAML 落进配置。
+
+### 一次性确认码怎么绑（0.5.0 起）
+
+确认码绑定「**路径 + 预览时的 item 集合**」：
+
+- 换包 → `token-mismatch`；
+- 要应用一个**没预览过**的项 → 拒绝（不许"预览 3 项、实际写第 4 项"）；
+- 应用**子集** → 允许（比预览更少永远更安全，也符合"只勾我要的"）。
 
 ### 为什么 GET 与 POST 挂在两套路由上（别再改回去）
 
@@ -117,16 +140,14 @@ scope；我们只是把字节落到备份目录，属于部署级操作，用 ow
 2. `content-type` 必须是 `application/octet-stream`（避免表单/JSON 混进来）；
 3. gzip 魔数必须是 `1f 8b`（否则拒绝并**删掉半截文件**），另有 64MB 上限与 0600 权限。
 
-### 人格备份：备份的是「生效值」
+### 人格：就是 `qqbot.persona` 这一个配置项
 
-`persona` 这一项备份的是 **`cordis.patch.yml` 里 `dsh-qq-bot.config.persona.text`**，
-也就是机器人每个新会话第一轮真正拼进用户消息的那份文本——**不是**仓库里的 `persona/whale.md`。
-（0.3.0 及更早只备份了后者，导到新机器人格不会恢复，这是用户实际踩到的坑。）
+人格不再是单独的 `persona/persona.text` 文件，而是**配置项 `qqbot.persona`**——
+也就是 `config.persona` 那个块，里面含 `enabled` / `name` / `text`。
+`text` 就是机器人每个新会话第一轮真正拼进用户消息的那份文本（**生效值**）。
 
-- 导出：`persona/persona.text` 存生效文本；`persona/whale.md` 作为源文件副本一起带上（方便编辑）。
-- 导入：把 `persona/persona.text` 写回配置的 `persona.text`（字面块标量，保留缩进与空行），
-  写回发生在配置段合并**之后**，不会被整段替换覆盖；仓库源文件同时更新（若包里有）。
-- 旧包只带 `persona/whale.md` 时：按「把它当成人格文本写回配置」处理，并在 warnings 里标明是旧格式。
+好处：导入人格＝逐项导入的一项，天然「写回配置」，不存在「备份了文件却没生效」这种错位。
+仓库里的 `persona/whale.md` 是独立的一项（`persona.source`，kind=file），只作编辑真源，不直接进会话。
 
 ### 导入的前置条件
 
@@ -164,7 +185,7 @@ scope；我们只是把字节落到备份目录，属于部署级操作，用 ow
 | `bad-bundle` | 不是本插件的包 / 解包失败 |
 | `version-mismatch` | DSH 主次版本不同，需要 force |
 | `integrity-failed` | 完整性校验失败 |
-| `nothing-to-import` | 包里没有可导入内容（或被 include 过滤掉） |
+| `nothing-to-import` | 没有要应用的项（没勾任何项，或所选项目与目标完全一致） |
 | `token-*` | 确认码的四种失败 |
 | `write-required` | 没带 `write=1` |
 
@@ -217,20 +238,20 @@ window.__ModuleLoader__.load({ id: 'dsh-qq-vault', factory: (require) => module.
 
 ```bash
 cd packages/dsh-qq-vault
-node --test test/*.mjs      # 68 项，全过（live.mjs 默认 skip）
+node --test test/*.mjs      # 86 项（80 通过 + 6 项 live 默认 skip）
 ```
 
 | 文件 | 项数 | 覆盖 |
 |---|---|---|
-| `bundle.test.mjs` | 12 | 切段/合并/幂等、版本闸、include 归一化、plan 只算不写 |
-| `routes.test.mjs` | 13 | 7 条 GET 路由、鉴权、405 护栏、export 头与魔数、token 全路径、全链路导入 |
-| `roundtrip.test.mjs` | 5 | 导出→预览→导入（合成数据），备份文件生成 |
-| `persona.test.mjs` | 10 | 人格文本的读/写：块标量与单行值、缩进保留、特殊字符、往返幂等 |
-| `persona-backup.test.mjs` | 4 | **人格备份取的是配置文本而非文件**、写回配置、旧包兼容 |
+| `bundle.test.mjs` | 17 | 段定位、**块定位（一级键边界/嵌套同名键/块标量）**、动态发现、plan 只算不写、写回只动一项 |
+| `granular.test.mjs` | 7 | **逐项核心验收**：导出 3 项只报 3 项、只应用 1 项其余逐字不变、0.14 新键自动发现、缺段 create、未勾项绝不写 |
+| `routes.test.mjs` | 13 | 8 条 GET 路由、鉴权、405 护栏、export 头与魔数、token 全路径、全链路导入 |
+| `roundtrip.test.mjs` | 6 | 导出→预览→只应用其中一项、只应用 memory 时配置零改动、幂等 |
+| `persona-backup.test.mjs` | 5 | **人格项带的是配置里的生效文本**、源文件独立成项、只导入人格时传输配置不变、旧格式包被拒 |
 | `upload.test.mjs` | 6 | 上传成功落盘/0600、方法闸、类型闸、空文件、非 gzip 无残留、声明超限 |
-| `handler-methods.test.mjs` | 6 | 静态护栏：webServer 路由只许 GET、唯一 POST 必须挂在 connection 且有三道校验、`ctx.effect` 注销 |
+| `handler-methods.test.mjs` | 7 | 静态护栏：webServer 路由只许 GET、唯一 POST 必须挂 connection 且有三道校验、`ctx.effect` 注销、客户端逐项交互 |
 | `v030.test.mjs` | 12 | 完整性（正常/篡改/缺文件/旧包）、list-bundles、cleanup、token 五种失败、错误码、启动清理 |
-| `live.mjs` | 6（默认 skip） | 真机检查：capabilities 新字段、7 条路由、cleanup dry-run、export gzip、405、无 token 导入 |
+| `live.mjs` | 6（默认 skip） | 真机检查：capabilities 新字段、8 条路由、cleanup dry-run、export gzip、405、无 token 导入 |
 
 测试全程只碰 `/tmp` 下的合成目录，**没有读写任何真实配置或记忆库**。
 

@@ -119,16 +119,16 @@ test('inject 必须声明 webServer（否则 apply 早于服务就绪，路由�
   assert.ok(inject.includes('webServer'), `inject 必须包含 webServer，实际：${JSON.stringify(inject)}`);
 });
 
-test('注册全部 7 条 GET 路由', () => {
+test('注册全部 8 条 GET 路由', () => {
   const env = makeEnv();
   try {
     const { routes, logs } = bootPlugin(env);
-    const expected = ['capabilities', 'list-bundles', 'cleanup', 'plan', 'export', 'preview-import', 'import'];
+    const expected = ['capabilities', 'items', 'list-bundles', 'cleanup', 'plan', 'export', 'preview-import', 'import'];
     for (const name of expected) {
       assert.ok(routes.has(`/dsh-qq-vault/${name}`), `缺少路由 ${name}`);
     }
     assert.equal(routes.size, expected.length, '不应再有 upload/download 端点（0.3.0 新增 list-bundles / cleanup）');
-    assert.ok(logs.some((l) => l.includes('已挂 7 条 GET 路由')), `日志应报告路由数：${logs.join(' | ')}`);
+    assert.ok(logs.some((l) => l.includes('已挂 8 条 GET 路由')), `日志应报告路由数：${logs.join(' | ')}`);
   } finally {
     fs.rmSync(env.root, { recursive: true, force: true });
   }
@@ -171,9 +171,12 @@ test('capabilities 返回可勾选项与未实现项', async () => {
     const res = await call(routes.get('/dsh-qq-vault/capabilities'), makeReq({ url: '/dsh-qq-vault/capabilities' }));
     assert.equal(res.status, 200);
     const data = res.json;
-    assert.deepEqual(data.include, ['config', 'persona', 'memory', 'whaleConfig']);
+    assert.equal(data.granular, true, '应声明支持逐项');
+    assert.equal(data.itemsEndpoint, '/dsh-qq-vault/items');
+    assert.ok(Array.isArray(data.groups) && data.groups.length > 0, '应返回分组');
     assert.ok(data.skipped.some((s) => s.key === 'sessions'));
-    assert.equal(data.sensitive.config, true);
+    // 敏感标记改为逐项返回（/items），capabilities 不再给全局映射
+    assert.equal(data.specialItems.memoryDb, 'memory.db');
   } finally {
     fs.rmSync(env.root, { recursive: true, force: true });
   }
@@ -183,7 +186,7 @@ test('plan 只算不写，参数走 query', async () => {
   const env = makeEnv();
   try {
     const { routes } = bootPlugin(env);
-    const res = await call(routes.get('/dsh-qq-vault/plan'), makeReq({ url: '/dsh-qq-vault/plan?include=config' }));
+    const res = await call(routes.get('/dsh-qq-vault/plan'), makeReq({ url: '/dsh-qq-vault/plan?items=qqbot.onebot' }));
     assert.equal(res.status, 200);
     assert.equal(res.json.files.length, 1);
     assert.equal(fs.existsSync(path.join(env.root, 'backups')), false);
@@ -197,7 +200,7 @@ test('export 直接流式下载：attachment + gzip 魔数', async () => {
   try {
     const { routes } = bootPlugin(env);
     const res = await call(routes.get('/dsh-qq-vault/export'), makeReq({
-      url: '/dsh-qq-vault/export?include=config,memory',
+      url: '/dsh-qq-vault/export?items=qqbot.onebot,memory.db',
     }));
     assert.equal(res.status, 200, res.text);
     const disposition = res.headers['content-disposition'] ?? '';
@@ -218,7 +221,7 @@ test('完整链路：export → preview（拿 token）→ import（凭 token 写
     const { routes } = bootPlugin(env);
 
     // 1) 导出（下载响应本身就是包，测试里另存一份到 backupDir 供导入使用）
-    const exp = await call(routes.get('/dsh-qq-vault/export'), makeReq({ url: '/dsh-qq-vault/export?include=config,memory' }));
+    const exp = await call(routes.get('/dsh-qq-vault/export'), makeReq({ url: '/dsh-qq-vault/export?items=qqbot.onebot,memory.db' }));
     assert.equal(exp.status, 200, exp.text);
     const fileName = /filename="([^"]+)"/.exec(exp.headers['content-disposition'])[1];
     const backupDir = path.join(env.root, 'backups', 'qqbot-vault');
@@ -230,8 +233,11 @@ test('完整链路：export → preview（拿 token）→ import（凭 token 写
       url: `/dsh-qq-vault/preview-import?path=${encodeURIComponent(fileName)}`,
     }));
     assert.equal(pv.status, 200, pv.text);
-    assert.ok(Array.isArray(pv.json.changes) && pv.json.changes.length >= 1);
-    assert.equal(pv.json.changes.find((c) => c.key === 'config').action, 'replace');
+    assert.ok(Array.isArray(pv.json.items) && pv.json.items.length >= 1, '预览应逐项返回');
+    // 自导自入（同机导出再导回）→ 内容一致，应如实报 same（0.4.0 会一律说 replace）
+    assert.equal(pv.json.items.find((i) => i.id === 'qqbot.onebot').action, 'same');
+    assert.equal(pv.json.changedCount, 0);
+    assert.equal(pv.json.granular === undefined || pv.json.granular === true, true);
     assert.match(pv.json.token, /^[0-9a-f-]{36}$/, '应返回 UUID 形式的一次性确认码');
     assert.equal(pv.json.tokenTtlSeconds, 300);
 
@@ -257,7 +263,7 @@ test('完整链路：export → preview（拿 token）→ import（凭 token 写
 
     // 6) 正确 token → 真导入
     const imported = await call(routes.get('/dsh-qq-vault/import'), makeReq({
-      url: `/dsh-qq-vault/import?path=${encodeURIComponent(fileName)}&write=1&token=${pv.json.token}`,
+      url: `/dsh-qq-vault/import?path=${encodeURIComponent(fileName)}&write=1&items=qqbot.onebot&token=${pv.json.token}`,
     }));
     assert.equal(imported.status, 200, imported.text);
     assert.equal(imported.json.written, true);
@@ -280,7 +286,7 @@ test('token 与目标文件绑定：换个路径不认', async () => {
   const env = makeEnv();
   try {
     const { routes } = bootPlugin(env);
-    const exp = await call(routes.get('/dsh-qq-vault/export'), makeReq({ url: '/dsh-qq-vault/export?include=config' }));
+    const exp = await call(routes.get('/dsh-qq-vault/export'), makeReq({ url: '/dsh-qq-vault/export?items=qqbot.onebot' }));
     const fileName = /filename="([^"]+)"/.exec(exp.headers['content-disposition'])[1];
     const backupDir = path.join(env.root, 'backups', 'qqbot-vault');
     fs.mkdirSync(backupDir, { recursive: true });

@@ -44,7 +44,17 @@ test('真机：capabilities 带 backupDir 与 supported:false（0.3.0 标志）'
   assert.equal(typeof body.tokenTtlSeconds, 'number');
 });
 
-test('真机：7 条路由都存在且 /list-bundles 结构正确', { skip: !LIVE }, async () => {
+test('真机：8 条路由都存在，/items 能逐项列出配置项', { skip: !LIVE }, async () => {
+  const itemsRes = await httpRequest(`${BASE}/dsh-qq-vault/items`);
+  assert.equal(itemsRes.status, 200);
+  const itemsBody = JSON.parse(itemsRes.body.toString('utf8'));
+  assert.equal(itemsBody.ok, true);
+  assert.ok(Array.isArray(itemsBody.items), '应返回逐项清单');
+  for (const item of itemsBody.items) {
+    assert.equal(typeof item.id, 'string');
+    assert.ok(['section', 'file', 'db'].includes(item.kind), `未知 kind：${item.kind}`);
+  }
+
   const listed = await httpRequest(`${BASE}/dsh-qq-vault/list-bundles`);
   assert.equal(listed.status, 200);
   const body = JSON.parse(listed.body.toString('utf8'));
@@ -65,7 +75,7 @@ test('真机：cleanup 默认 dry-run（不删）', { skip: !LIVE }, async () =>
 });
 
 test('真机：export 是 gzip 附件', { skip: !LIVE }, async () => {
-  const res = await httpRequest(`${BASE}/dsh-qq-vault/export?include=config`);
+  const res = await httpRequest(`${BASE}/dsh-qq-vault/export?items=qqbot.onebot`);
   assert.equal(res.status, 200);
   assert.match(String(res.headers['content-type'] || ''), /gzip/);
   assert.match(String(res.headers['content-disposition'] || ''), /attachment/);
@@ -74,6 +84,7 @@ test('真机：export 是 gzip 附件', { skip: !LIVE }, async () => {
   // 解出来应包含 manifest
   const tar = zlib.gunzipSync(res.body).toString('latin1');
   assert.ok(tar.includes('manifest.json'));
+  assert.ok(tar.includes('items/qqbot.onebot.yml'), '逐项后包内是 items/<id>.yml');
 });
 
 test('真机：非 GET 一律 405（平台护栏）', { skip: !LIVE }, async () => {

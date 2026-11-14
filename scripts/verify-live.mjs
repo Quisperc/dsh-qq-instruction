@@ -110,12 +110,12 @@ await step('vault capabilities', async () => {
 });
 
 await step('vault plan', async () => {
-  const r = await httpRequest(`${BASE}/dsh-qq-vault/plan?include=config,persona`);
+  const r = await httpRequest(`${BASE}/dsh-qq-vault/plan?items=qqbot.onebot,qqbot.persona`);
   check('vault /plan', r.status === 200, `HTTP ${r.status}`);
 });
 
 await step('vault export', async () => {
-  const r = await httpRequest(`${BASE}/dsh-qq-vault/export?include=config`);
+  const r = await httpRequest(`${BASE}/dsh-qq-vault/export?items=qqbot.onebot`);
   check('vault /export 状态码', r.status === 200, `HTTP ${r.status}`);
   const ct = String(r.headers['content-type'] ?? '');
   check('vault /export content-type', ct.includes('gzip'), ct || '(空)');
@@ -127,7 +127,7 @@ await step('vault export', async () => {
     const tar = zlib.gunzipSync(r.body);
     const text = tar.toString('latin1');
     check('导出包内含 manifest.json', text.includes('manifest.json'), text.includes('manifest.json') ? 'ok' : '缺失');
-    check('导出包内含 qq-bot 配置段', text.includes('cordis-qq-bot.yml') || text.includes('dsh-qq-bot'), 'ok');
+    check('导出包是逐项布局（items/<id>.yml）', text.includes('items/qqbot.onebot.yml'), text.includes('items/qqbot.onebot.yml') ? 'ok' : '缺 items/qqbot.onebot.yml');
   }
 });
 

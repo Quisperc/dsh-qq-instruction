@@ -1,14 +1,16 @@
 /**
  * dsh-qq-vault —— 核心逻辑（纯函数 + 文件操作），不依赖 DSH 运行时。
  *
- * 逻辑来源：直接搬 `scripts/export-config.mjs` / `scripts/import-config.mjs` 的已验证实现
- * （切 `- id: dsh-qq-bot` 段、整段替换、VACUUM INTO、主次版本闸），改成可被 host 半调用。
- * 那些脚本仍然可以单独跑；这里是它们的功能子集 + 设置页要的 include 过滤。
+ * 0.5.0 起改成**逐配置项**（item）为单位：
+ *   导出时按项打包（`items/qqbot.onebot.yml` …），导入时逐项对比、只应用用户勾选的那些。
+ *   0.4.0 及以前是「整个 `- id: dsh-qq-bot` 段整段替换」——用户勾一项也会把没勾的配置
+ *   一起覆盖，连注释都被换掉，这就是用户说的「侵入式」。
  *
  * 设计约束：
  *   - 所有写操作默认 dry-run，必须显式 write:true；
  *   - 任何函数都不抛到调用方之外（host 半负责兜住），失败返回 { ok:false, error }；
- *   - 不 import 任何第三方包（只 node: 内置），目标机不需要装依赖。
+ *   - 不 import 任何第三方包（只 node: 内置），目标机不需要装依赖；
+ *   - 配置项**动态发现**（见 items.js），不硬编码键名清单。
  */
 
 import fs from 'node:fs';
@@ -17,21 +19,13 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
-import { extractPersonaText, replacePersonaText } from './persona.js';
+import { ENTRY, ENTRY_GROUP } from './constants.js';
+import { readEntryItems, readItemBlock, writeItemBlock, labelOf } from './items.js';
 
-/** 会写进包里的条目 id（YAML 顶格写法）。 */
-export const ENTRY = {
-  qqBot: '- id: dsh-qq-bot',
-  whale: '- id: dsh-qq-whale',
-};
-
-/** 可勾选的数据项。`sessions` 明确不实现（见 SKIPPED）。 */
-export const INCLUDE_KEYS = ['config', 'persona', 'memory', 'whaleConfig'];
+export { ENTRY };
 
 /**
  * 本次不实现的数据项：在 UI 上**标灰显示**（而不是消失），并说明原因。
- * `supported:false` 是给客户端用的显式标记——0.2.0 之前只有 reason，
- * 客户端只能靠字符串猜，加了这个字段后 UI 才能稳定渲染成"禁用项"。
  */
 export const SKIPPED = {
   sessions: {
@@ -59,7 +53,7 @@ export const ERROR_CODES = {
 
 /**
  * 造一个结构化错误对象（host 半直接 JSON 返回）。
- * 保留 `error` 字段与 `message` 同值，兼容 0.2.0 的客户端。
+ * 保留 `error` 字段与 `message` 同值，兼容早先的客户端。
  * @param {string} code
  * @param {string} message
  * @param {Record<string, unknown>} [extra]
@@ -101,6 +95,8 @@ export function detectDshVersion() {
   return pkg?.version ?? 'unknown';
 }
 
+// ── 条目段（保留给旧调用方；新逻辑走 items.js 的块扫描）────────────────────
+
 /**
  * 在 YAML 文本里找 `- id: xxx` 段（到下一个顶格 `- id:` 或文件尾）。
  * @param {string} text YAML 全文
@@ -126,38 +122,6 @@ export function extractEntryBlock(text, entryId = ENTRY.qqBot) {
 }
 
 /**
- * 把一段条目合并进目标文本：有同名段则整段替换，无则追加到末尾。
- * 绝不产生两个同名段。
- */
-export function mergeEntryBlock(targetText, block, entryId = ENTRY.qqBot) {
-  const lines = String(targetText ?? '').split('\n');
-  const { startLine, endLine } = findEntryBlock(targetText, entryId);
-  if (startLine >= 0) {
-    lines.splice(startLine, endLine - startLine, ...String(block).split('\n'));
-    return { text: lines.join('\n'), action: 'replaced' };
-  }
-  const trimmed = String(targetText ?? '').replace(/\s+$/, '');
-  return { text: `${trimmed}\n\n${block}\n`, action: 'appended' };
-}
-
-/** include 归一化：去重、丢掉未知项，并返回被忽略的名字。 */
-export function normalizeInclude(input) {
-  const list = Array.isArray(input) ? input : [];
-  const seen = new Set();
-  const include = [];
-  const ignored = [];
-  for (const raw of list) {
-    const name = String(raw ?? '').trim();
-    if (name === '') continue;
-    if (!INCLUDE_KEYS.includes(name)) { if (!ignored.includes(name)) ignored.push(name); continue; }
-    if (seen.has(name)) continue;
-    seen.add(name);
-    include.push(name);
-  }
-  return { include, ignored };
-}
-
-/**
  * 解析本机路径。全部可覆盖，便于测试与换机。
  * @param {{home?:string, profile?:string, workspace?:string, repoRoot?:string}} [opts]
  */
@@ -170,13 +134,11 @@ export function resolvePaths(opts = {}) {
   );
   // 仓库根的回退顺序：显式配置 → 环境变量 → cwd → $DSH_HOME/QQBotV2。
   // 为什么要回退：插件跑在宿主进程里，cwd 通常不是仓库根，直接 cwd 会让人格源文件
-  // （persona/whale.md）静默漏备份。生效人格 persona.text 来自配置、不受影响，
-  // 但源文件副本对"以后还想编辑人格"的人有用，值得找一下。
+  // （persona/whale.md）静默漏备份。
   const repoCandidates = [
     opts.repoRoot,
     process.env.DSH_QQ_REPO,
     path.join(process.cwd(), 'dsh-qq-instruction'),
-    // 本机部署的实际位置：$DSH_HOME/home/QQBotV2/dsh-qq-instruction
     path.join(home, 'home', 'QQBotV2', 'dsh-qq-instruction'),
     path.join(home, 'QQBotV2', 'dsh-qq-instruction'),
   ].filter((value) => typeof value === 'string' && value !== '');
@@ -213,7 +175,6 @@ export function exportMemoryDb(dbPath, outPath) {
     }
     return { ok: true, mode: 'vacuum-into' };
   } catch (error) {
-    // 回退：db 与 wal 必须成对，否则会丢已提交数据
     const copied = [];
     for (const suffix of ['', '-wal', '-shm']) {
       const src = dbPath + suffix;
@@ -249,124 +210,192 @@ function walkFiles(root) {
   return out;
 }
 
+// ── item 模型 ────────────────────────────────────────────────────────────────
+
+/** 特殊 item 的 id（不是配置项，但也参与勾选）。 */
+export const SPECIAL_ITEMS = {
+  personaSource: 'persona.source',
+  memoryDb: 'memory.db',
+};
+
+/** 特殊 item 的展示信息。 */
+const SPECIAL_META = {
+  [SPECIAL_ITEMS.personaSource]: {
+    group: 'persona',
+    label: '人格源文件（仓库 persona/whale.md，仅作编辑真源）',
+    kind: 'file',
+    sensitive: true,
+  },
+  [SPECIAL_ITEMS.memoryDb]: {
+    group: 'memory',
+    label: '记忆库（QQ_msg/.dsh-meow/memory.db）',
+    kind: 'db',
+    sensitive: true,
+  },
+};
+
+/**
+ * 清点**本机**可导出的全部 item。
+ *
+ * 配置项动态发现：扫 `- id: dsh-qq-bot` 与 `- id: dsh-qq-whale` 的 config 一级子键，
+ * 所以 qq-bot 以后再加键（0.14 的 reply.bubbleGapMinMs / sticker.*）也会自动出现。
+ *
+ * @param {ReturnType<typeof resolvePaths>} paths
+ * @returns {{ ok:true, items:object[], groups:object[], warnings:string[] }}
+ */
+export function collectItems(paths) {
+  const warnings = [];
+  let patchText = '';
+  if (fs.existsSync(paths.patchPath)) patchText = fs.readFileSync(paths.patchPath, 'utf8');
+  else warnings.push(`找不到 profile 配置：${paths.patchPath}`);
+
+  const items = [];
+  const groups = [];
+
+  for (const [entryId, prefix] of Object.entries(ENTRY_GROUP)) {
+    const scanned = readEntryItems(patchText, entryId);
+    const groupItems = [];
+    for (const entry of scanned.items) {
+      groupItems.push({
+        id: `${prefix}.${entry.key}`,
+        group: prefix,
+        label: labelOf(entry.key),
+        kind: 'section',
+        key: entry.key,
+        entryId,
+        sensitive: entry.sensitive,
+        present: true,
+        bytes: entry.bytes,
+        block: entry.block,
+      });
+    }
+    groups.push({
+      group: prefix,
+      entryId,
+      present: scanned.present === true,
+      label: prefix === 'qqbot' ? 'dsh-qq-bot（QQ 机器人）' : 'dsh-qq-whale（工具面收窄）',
+      count: groupItems.length,
+      note: scanned.present === true
+        ? undefined
+        : `配置里没有 \`${entryId}\` 段（该插件可能没装，或还没在设置页改过任何项）`,
+    });
+    items.push(...groupItems);
+  }
+
+  if (fs.existsSync(paths.personaPath)) {
+    const meta = SPECIAL_META[SPECIAL_ITEMS.personaSource];
+    items.push({
+      id: SPECIAL_ITEMS.personaSource,
+      group: meta.group,
+      label: meta.label,
+      kind: meta.kind,
+      sensitive: meta.sensitive,
+      present: true,
+      bytes: fs.statSync(paths.personaPath).size,
+      source: paths.personaPath,
+    });
+  } else {
+    warnings.push(`找不到人格源文件：${paths.personaPath}`);
+  }
+
+  if (fs.existsSync(paths.dbPath)) {
+    const meta = SPECIAL_META[SPECIAL_ITEMS.memoryDb];
+    items.push({
+      id: SPECIAL_ITEMS.memoryDb,
+      group: meta.group,
+      label: meta.label,
+      kind: meta.kind,
+      sensitive: meta.sensitive,
+      present: true,
+      bytes: fs.statSync(paths.dbPath).size,
+      source: paths.dbPath,
+    });
+  } else {
+    warnings.push(`找不到记忆库：${paths.dbPath}`);
+  }
+
+  // 特殊组也列进 groups，UI 才能分组渲染
+  for (const group of ['persona', 'memory']) {
+    const list = items.filter((item) => item.group === group);
+    if (list.length === 0) continue;
+    groups.push({
+      group,
+      label: group === 'persona' ? '人格源文件' : '记忆库',
+      present: true,
+      count: list.length,
+    });
+  }
+
+  return { ok: true, items, groups, warnings };
+}
+
+/** 解析 `items=a,b,c`：去空、去重；空 → undefined（= 全部）。 */
+export function parseItemIds(input) {
+  const raw = Array.isArray(input) ? input : (typeof input === 'string' && input !== '' ? input.split(',') : []);
+  const seen = new Set();
+  const ids = [];
+  for (const value of raw) {
+    const id = String(value ?? '').trim();
+    if (id === '' || seen.has(id)) continue;
+    seen.add(id);
+    ids.push(id);
+  }
+  return ids.length === 0 ? undefined : ids;
+}
+
+/** item id → 导出包内路径。 */
+export function itemPath(id) {
+  if (id === SPECIAL_ITEMS.personaSource) return 'persona/whale.md';
+  if (id === SPECIAL_ITEMS.memoryDb) return 'memory/memory.db';
+  return `items/${id}.yml`;
+}
+
 /**
  * 计划导出：只算不写。
- * @param {{include:string[], paths:ReturnType<typeof resolvePaths>}} input
+ * @param {{items?:string[], paths:ReturnType<typeof resolvePaths>}} input
  */
-export function planExport({ include, paths }) {
-  const { include: picked, ignored } = normalizeInclude(include);
+export function planExport({ items, paths }) {
+  const all = collectItems(paths);
+  const picked = items === undefined ? all.items.map((item) => item.id) : items;
+  const warnings = [...all.warnings];
+  const unknown = [];
   const files = [];
-  const warnings = [];
-  const skipped = [];
 
-  if (picked.length === 0 && ignored.length === 0) {
-    warnings.push('没有勾选任何数据项：至少要选一项才会生成包');
+  const known = new Map(all.items.map((item) => [item.id, item]));
+  for (const id of picked) {
+    const item = known.get(id);
+    if (item === undefined) { unknown.push(id); continue; }
+    files.push({
+      id: item.id,
+      group: item.group,
+      label: item.label,
+      kind: item.kind,
+      path: itemPath(item.id),
+      bytes: item.bytes,
+      sensitive: item.sensitive,
+    });
   }
+  if (unknown.length > 0) warnings.push(`这些配置项在当前机器上不存在，已跳过：${unknown.join(', ')}`);
+  if (files.length === 0) warnings.push('没有可导出的数据项：至少要选一项');
 
-  let patchText = '';
-  if (picked.includes('config') || picked.includes('whaleConfig') || picked.includes('persona')) {
-    if (fs.existsSync(paths.patchPath)) patchText = fs.readFileSync(paths.patchPath, 'utf8');
-    else warnings.push(`找不到 profile 配置：${paths.patchPath}`);
-  }
-
-  if (picked.includes('config')) {
-    const block = extractEntryBlock(patchText, ENTRY.qqBot);
-    if (block === '') {
-      warnings.push(`配置里没有 \`${ENTRY.qqBot}\` 段，无法导出（先确认 dsh-qq-bot 已装并配置）`);
-    } else {
-      files.push({
-        path: 'cordis-qq-bot.yml',
-        source: paths.patchPath,
-        lines: block.split('\n').length,
-        bytes: Buffer.byteLength(`${block}\n`),
-        sensitive: true,
-        note: '含 NapCat token 与 QQ 号，请只走私密通道',
-      });
-    }
-  }
-
-  if (picked.includes('whaleConfig')) {
-    const block = extractEntryBlock(patchText, ENTRY.whale);
-    if (block === '') {
-      skipped.push({ key: 'whaleConfig', reason: 'profile 里没有 dsh-qq-whale 段（该插件当前只提供 preset，通常没有配置段）' });
-    } else {
-      files.push({
-        path: 'cordis-qq-whale.yml',
-        source: paths.patchPath,
-        lines: block.split('\n').length,
-        bytes: Buffer.byteLength(`${block}\n`),
-        sensitive: false,
-      });
-    }
-  }
-
-  if (picked.includes('persona')) {
-    // 真正生效的人格是 cordis.patch.yml 里 dsh-qq-bot.config.persona.text，
-    // 不是仓库里的 persona/whale.md（那是源文件）。早期版本只备份了后者，
-    // 结果导到新机器人格根本没恢复——所以这里以"生效值"为主，源文件只作附带副本。
-    const effective = extractPersonaText(patchText);
-    if (effective.ok === true && effective.text !== '') {
-      files.push({
-        path: 'persona/persona.text',
-        source: paths.patchPath,
-        chars: effective.text.length,
-        bytes: Buffer.byteLength(effective.text, 'utf8'),
-        sensitive: false,
-        effective: 'config.persona.text',
-        note: '生效人格文本（来自 cordis.patch.yml 的 persona.text），导回时会写回配置',
-      });
-    } else if (effective.ok !== true) {
-      warnings.push(`读不到生效人格（${effective.error}）：这次只备份人格源文件`);
-    } else {
-      warnings.push('配置里的 persona.text 是空的：这次只备份人格源文件');
-    }
-
-    if (fs.existsSync(paths.personaPath)) {
-      files.push({
-        path: 'persona/whale.md',
-        source: paths.personaPath,
-        bytes: fs.statSync(paths.personaPath).size,
-        sensitive: false,
-        note: '人格源文件（仅供编辑/回填真源，不直接进会话）',
-      });
-    } else if (effective.ok !== true || effective.text === '') {
-      warnings.push(`找不到人格真源：${paths.personaPath}`);
-    }
-  }
-
-  if (picked.includes('memory')) {
-    if (fs.existsSync(paths.dbPath)) {
-      files.push({
-        path: 'memory/memory.db',
-        source: paths.dbPath,
-        bytes: fs.statSync(paths.dbPath).size,
-        sensitive: true,
-        note: '含聊天记忆（可能涉及他人隐私），导出前想清楚',
-      });
-    } else {
-      warnings.push(`找不到记忆库：${paths.dbPath}`);
-    }
-  }
-
-  const totalBytes = files.reduce((sum, file) => sum + (file.bytes ?? 0), 0);
   return {
     ok: true,
-    include: picked,
-    ignored,
+    items: picked,
     files,
-    totalBytes,
+    totalBytes: files.reduce((sum, file) => sum + (file.bytes ?? 0), 0),
     warnings,
-    skipped: [...skipped, ...Object.entries(SKIPPED).map(([key, meta]) => ({ key, reason: meta.reason, notImplemented: true }))],
+    groups: all.groups,
+    skipped: Object.entries(SKIPPED).map(([key, meta]) => ({ key, ...meta, notImplemented: true })),
     dshVersion: detectDshVersion(),
   };
 }
 
 /**
- * 真导出：写 staging → tar czf → 返回路径。
- * @param {{include:string[], paths:ReturnType<typeof resolvePaths>, outDir?:string, now?:Date}} input
+ * 真导出：只把选中的项写进 staging → tar czf。
+ * @param {{items?:string[], paths:ReturnType<typeof resolvePaths>, outDir?:string, now?:Date}} input
  */
-export function runExport({ include, paths, outDir, now }) {
-  const plan = planExport({ include, paths });
+export function runExport({ items, paths, outDir, now }) {
+  const plan = planExport({ items, paths });
   if (plan.files.length === 0) {
     return { ok: false, error: '没有可导出的数据项', plan };
   }
@@ -377,39 +406,59 @@ export function runExport({ include, paths, outDir, now }) {
   const outPath = path.join(dir, `qqbot-vault-${stamp}.tar.gz`);
   const staging = fs.mkdtempSync(path.join(os.tmpdir(), 'qqbot-vault-export-'));
 
+  const all = collectItems(paths);
+  const known = new Map(all.items.map((item) => [item.id, item]));
+
   try {
     for (const file of plan.files) {
+      const item = known.get(file.id);
+      if (item === undefined) continue;
       const dest = path.join(staging, file.path);
       fs.mkdirSync(path.dirname(dest), { recursive: true });
-      if (file.path === 'cordis-qq-bot.yml' || file.path === 'cordis-qq-whale.yml') {
-        const entryId = file.path === 'cordis-qq-bot.yml' ? ENTRY.qqBot : ENTRY.whale;
-        const block = extractEntryBlock(fs.readFileSync(paths.patchPath, 'utf8'), entryId);
+
+      if (item.kind === 'section') {
+        // 现取一次，避免 plan 与写盘之间被改过
+        const block = readItemBlock(fs.readFileSync(paths.patchPath, 'utf8'), item.entryId, item.key);
+        if (block === undefined) {
+          plan.warnings.push(`${item.id} 在导出瞬间消失了，已跳过`);
+          continue;
+        }
         fs.writeFileSync(dest, `${block}\n`, 'utf8');
-      } else if (file.path === 'memory/memory.db') {
+      } else if (item.kind === 'db') {
         const mem = exportMemoryDb(paths.dbPath, dest);
         if (!mem.ok) {
           plan.warnings.push(`记忆库未导出：${mem.error}`);
           continue;
         }
         if (mem.warning) plan.warnings.push(mem.warning);
-        // 回退模式下 wal/shm 已就近写在 dest 旁，一并入包
-      } else if (file.path === 'persona/persona.text') {
-        // 生效人格：从配置里现取一次，避免和 plan 阶段之间被改过
-        const effective = extractPersonaText(fs.readFileSync(paths.patchPath, 'utf8'));
-        if (effective.ok !== true) {
-          plan.warnings.push(`人格未导出：${effective.error}`);
-          continue;
-        }
-        fs.writeFileSync(dest, effective.text, 'utf8');
       } else {
-        fs.copyFileSync(file.source, dest);
+        fs.copyFileSync(item.source, dest);
       }
     }
 
     const files = walkFiles(staging);
+    // 把每条文件记录映射回 item（manifest.items 是权威清单，files 保留给完整性校验）
+    const byPath = new Map(plan.files.map((file) => [file.path, file]));
+    const manifestItems = files
+      .filter((file) => file.path !== 'manifest.json')
+      .map((file) => {
+        const meta = byPath.get(file.path);
+        return {
+          id: meta?.id ?? file.path,
+          group: meta?.group,
+          label: meta?.label,
+          kind: meta?.kind,
+          path: file.path,
+          bytes: file.bytes,
+          sha256: file.sha256,
+          sensitive: meta?.sensitive === true,
+        };
+      });
+
     const manifest = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       kind: 'qqbot-vault-bundle',
+      granular: true,
       exportedAt: new Date().toISOString(),
       dsh: { version: plan.dshVersion, home: paths.home, profile: paths.profile },
       plugins: {
@@ -417,10 +466,11 @@ export function runExport({ include, paths, outDir, now }) {
         whale: readJsonSafe(path.join(paths.repoRoot, 'packages', 'dsh-qq-whale', 'package.json'))?.version ?? 'unknown',
         meowMemory: readJsonSafe(path.join(paths.profileDir, 'node_modules', 'meow-memory', 'package.json'))?.version ?? 'unknown',
       },
-      include: plan.include.filter((key) => !(key === 'whaleConfig' && !files.some((f) => f.path === 'cordis-qq-whale.yml'))),
-      files,
+      items: manifestItems,
+      files: manifestItems.map(({ id, ...rest }) => rest),
       notes: [
-        'cordis-qq-bot.yml 含 NapCat token 与 QQ 号，请务必私密传输',
+        '配置项按项打包（items/<item id>.yml），导入时只应用勾选的项',
+        '含 token / QQ 号 / 人格的项请私密传输',
         'memory.db 由 SQLite VACUUM INTO 生成；导入前建议先停 DSH（或导入后立即重启）',
       ],
     };
@@ -433,7 +483,7 @@ export function runExport({ include, paths, outDir, now }) {
       ok: true,
       path: outPath,
       bytes: fs.statSync(outPath).size,
-      files,
+      files: manifestItems,
       manifest,
       warnings: plan.warnings,
     };
@@ -463,13 +513,10 @@ function openBundle(bundlePath) {
 }
 
 /**
- * 校验包内文件的完整性：按 manifest.files 的 sha256 逐个比对。
+ * 校验包内文件的完整性：按 manifest.items（或旧包的 manifest.files）的 sha256 逐个比对。
  *
  * 为什么必须做：备份包含 NapCat token 与记忆库，传输过程（网盘、IM、剪贴板）
  * 都可能损坏或截断。没有这一步时，损坏的包会「看起来导入成功」，实际写进半截配置。
- *
- * 兼容：0.1/0.2 的包 manifest.files 已带 sha256；若字段缺失则跳过并给出提示，
- * 不因为旧包而拒绝导入（宁可提示，不要把用户锁死）。
  *
  * @param {string} staging 解包目录
  * @param {any} manifest 包内 manifest.json
@@ -477,9 +524,10 @@ function openBundle(bundlePath) {
  */
 export function verifyBundleIntegrity(staging, manifest) {
   const result = { ok: true, checked: 0, missing: [], mismatched: [], skipped: [] };
-  const files = Array.isArray(manifest?.files) ? manifest.files : undefined;
+  const files = Array.isArray(manifest?.items) ? manifest.items
+    : (Array.isArray(manifest?.files) ? manifest.files : undefined);
   if (files === undefined) {
-    result.skipped.push('manifest 里没有 files 清单（旧版本包），跳过完整性校验');
+    result.skipped.push('manifest 里没有 items/files 清单（旧版本包），跳过完整性校验');
     return result;
   }
   for (const entry of files) {
@@ -508,10 +556,7 @@ export function verifyBundleIntegrity(staging, manifest) {
 
 /**
  * 列出备份目录里可导入的包（只认本插件产出的 `qqbot-vault-*.tar.gz`）。
- * 目的是让设置页给下拉选择，而不是让用户手打路径。
- *
  * @param {ReturnType<typeof resolvePaths>} paths
- * @returns {{ ok:true, dir:string, files:{name:string,path:string,bytes:number,mtime:string}[] }}
  */
 export function listBundles(paths) {
   const dir = paths.backupDir;
@@ -539,8 +584,6 @@ export function listBundles(paths) {
  *   - 只匹配文件名模式，**不会**递归、不会跟随符号链接、不会删其它文件；
  *   - 默认 dry-run（write 不为 true 时只报告将删什么）；
  *   - keep 至少为 1，避免"一次清理删光"。
- *
- * @param {{paths:ReturnType<typeof resolvePaths>, keep?:number, maxAgeDays?:number, write?:boolean, now?:Date}} input
  */
 export function cleanupBundles({ paths, keep = 10, maxAgeDays, write = false, now = new Date() }) {
   const listed = listBundles(paths);
@@ -549,9 +592,7 @@ export function cleanupBundles({ paths, keep = 10, maxAgeDays, write = false, no
     ? undefined
     : now.getTime() - Math.max(0, Number(maxAgeDays)) * 24 * 60 * 60 * 1000;
 
-  // files 已按 mtime 倒序：前 safeKeep 个保留
   const keepSet = new Set(listed.files.slice(0, safeKeep).map((file) => file.path));
-  // 永远保住最新的一个：即使它已经超过 maxAgeDays，也不能让目录变空
   const newest = listed.files.length > 0 ? listed.files[0].path : undefined;
 
   const doomed = listed.files.filter((file) => {
@@ -559,7 +600,6 @@ export function cleanupBundles({ paths, keep = 10, maxAgeDays, write = false, no
     const beyondKeep = keepSet.has(file.path) !== true;
     if (cutoff === undefined) return beyondKeep;
     const tooOld = Date.parse(file.mtime) <= cutoff;
-    // 两种都算：超出保留数量的，或超过年龄的（后者用于启动清理）
     return beyondKeep || tooOld;
   });
 
@@ -587,8 +627,37 @@ export function cleanupBundles({ paths, keep = 10, maxAgeDays, write = false, no
   };
 }
 
+/** 取前 N 个字符做预览（去掉尾部空白，换行保留为字面量便于 UI 显示）。 */
+function previewOf(text, limit = 200) {
+  const value = String(text ?? '');
+  return value.length <= limit ? value : `${value.slice(0, limit)}…`;
+}
+
+/** 当前机器上某一项的「现状」。 */
+function currentOf(item, paths, patchText) {
+  if (item.kind === 'section') {
+    const block = readItemBlock(patchText, item.entryId, item.key);
+    return block === undefined
+      ? { present: false, bytes: 0, preview: '' }
+      : { present: true, bytes: Buffer.byteLength(`${block}\n`, 'utf8'), preview: previewOf(block), block };
+  }
+  if (item.kind === 'file') {
+    if (!fs.existsSync(paths.personaPath)) return { present: false, bytes: 0, preview: '' };
+    const text = fs.readFileSync(paths.personaPath, 'utf8');
+    return { present: true, bytes: Buffer.byteLength(text, 'utf8'), preview: previewOf(text), text };
+  }
+  // db
+  if (!fs.existsSync(paths.dbPath)) return { present: false, bytes: 0, preview: '' };
+  return { present: true, bytes: fs.statSync(paths.dbPath).size, preview: '(SQLite 数据库)' };
+}
+
 /**
- * 预览导入：解包 → 完整性校验 → 版本闸 → 算出将变动的条目，不写任何文件。
+ * 预览导入：解包 → 完整性校验 → 版本闸 → **逐项**算出将变动的项，不写任何文件。
+ *
+ * 返回的每一项都带 current / incoming 两侧的字节数与预览，
+ * 客户端据此渲染「未变 / 将替换 / 将新增」，并只允许勾选 changed 的行。
+ *
+ * @param {{bundlePath:string, paths:ReturnType<typeof resolvePaths>, force?:boolean}} input
  */
 export function previewImport({ bundlePath, paths, force = false }) {
   let opened;
@@ -609,8 +678,6 @@ export function previewImport({ bundlePath, paths, force = false }) {
         : `DSH 版本不一致：目标 ${current}，导出时 ${wanted}${force ? '（已选择强制）' : '；跨版本导入需确认强制'}`,
     };
 
-    // 完整性：manifest 的 sha256 与实际解包内容比对。缺文件/不一致都算失败，
-    // 除非调用方显式 force（例如明知手工改过包内容）。
     const integrityResult = verifyBundleIntegrity(staging, manifest);
     const integrity = {
       ok: integrityResult.ok,
@@ -624,90 +691,106 @@ export function previewImport({ bundlePath, paths, force = false }) {
         : '完整性校验失败：包内容与 manifest 记录不一致（可能传输损坏），确认无误可用 force 强制导入',
     };
 
-    const changes = [];
+    const patchText = fs.existsSync(paths.patchPath) ? fs.readFileSync(paths.patchPath, 'utf8') : '';
     const warnings = [];
 
-    const bundledPath = path.join(staging, 'cordis-qq-bot.yml');
-    if (fs.existsSync(bundledPath)) {
-      const bundled = fs.readFileSync(bundledPath, 'utf8').replace(/\s+$/, '');
-      if (!bundled.startsWith(ENTRY.qqBot)) {
-        warnings.push(`包内 cordis-qq-bot.yml 不以 \`${ENTRY.qqBot}\` 开头，将忽略`);
-      } else {
-        const targetText = fs.existsSync(paths.patchPath) ? fs.readFileSync(paths.patchPath, 'utf8') : '';
-        const existing = findEntryBlock(targetText, ENTRY.qqBot);
-        changes.push({
-          key: 'config',
-          target: paths.patchPath,
-          action: existing.block === '' ? 'append' : 'replace',
-          lines: bundled.split('\n').length,
-          existingLines: existing.block === '' ? 0 : existing.block.split('\n').length,
-          preview: bundled.split('\n').slice(0, 6),
-          sensitive: true,
-        });
+    const declared = Array.isArray(manifest?.items)
+      ? manifest.items
+      : (Array.isArray(manifest?.files) ? manifest.files : []);
+    if (Array.isArray(manifest?.items) !== true) {
+      warnings.push('这是 0.4.0 及以前格式的包（没有逐项清单）：只能整体识别，建议用新版重新导出');
+    }
+
+    const items = [];
+    for (const entry of declared) {
+      const id = typeof entry?.id === 'string' ? entry.id : undefined;
+      const filePath = typeof entry?.path === 'string' ? entry.path : undefined;
+      if (filePath === undefined) continue;
+      const full = path.join(staging, filePath);
+      if (!fs.existsSync(full)) {
+        warnings.push(`包内缺文件：${filePath}（该项跳过）`);
+        continue;
       }
-    }
 
-    const bundledWhale = path.join(staging, 'cordis-qq-whale.yml');
-    if (fs.existsSync(bundledWhale)) {
-      const bundled = fs.readFileSync(bundledWhale, 'utf8').replace(/\s+$/, '');
-      const targetText = fs.existsSync(paths.patchPath) ? fs.readFileSync(paths.patchPath, 'utf8') : '';
-      const existing = findEntryBlock(targetText, ENTRY.whale);
-      changes.push({
-        key: 'whaleConfig',
-        target: paths.patchPath,
-        action: existing.block === '' ? 'append' : 'replace',
-        lines: bundled.split('\n').length,
-        existingLines: existing.block === '' ? 0 : existing.block.split('\n').length,
-        sensitive: false,
+      let item;
+      if (id !== undefined && id.startsWith('qqbot.')) {
+        const key = id.slice('qqbot.'.length);
+        item = { id, kind: 'section', key, entryId: ENTRY.qqBot };
+      } else if (id !== undefined && id.startsWith('whale.')) {
+        const key = id.slice('whale.'.length);
+        item = { id, kind: 'section', key, entryId: ENTRY.whale };
+      } else if (id === SPECIAL_ITEMS.personaSource) {
+        item = { id, kind: 'file' };
+      } else if (id === SPECIAL_ITEMS.memoryDb) {
+        item = { id, kind: 'db' };
+      } else if (filePath.startsWith('items/') && filePath.endsWith('.yml')) {
+        // 没有 id 字段的包：从路径反推
+        const raw = filePath.slice('items/'.length, -'.yml'.length);
+        const dot = raw.indexOf('.');
+        const prefix = raw.slice(0, dot);
+        const key = raw.slice(dot + 1);
+        const entryId = prefix === 'qqbot' ? ENTRY.qqBot : (prefix === 'whale' ? ENTRY.whale : undefined);
+        if (entryId === undefined) { warnings.push(`无法识别的配置项：${filePath}`); continue; }
+        item = { id: raw, kind: 'section', key, entryId };
+      } else {
+        warnings.push(`无法识别的包内条目：${filePath}`);
+        continue;
+      }
+
+      const incomingBuf = fs.readFileSync(full);
+      const incomingBlock = item.kind === 'section' ? incomingBuf.toString('utf8').replace(/\s+$/, '') : undefined;
+      const currentState = currentOf(item, paths, patchText);
+
+      let action;
+      if (item.kind === 'section') {
+        action = currentState.present !== true
+          ? 'create'
+          : (currentState.block === incomingBlock ? 'same' : 'replace');
+      } else if (item.kind === 'file') {
+        const sameBytes = currentState.present === true
+          && fs.readFileSync(paths.personaPath).equals(incomingBuf);
+        action = currentState.present !== true ? 'create' : (sameBytes ? 'same' : 'replace');
+      } else {
+        const sameBytes = currentState.present === true
+          && fs.readFileSync(paths.dbPath).equals(incomingBuf);
+        action = currentState.present !== true ? 'create' : (sameBytes ? 'same' : 'replace');
+      }
+
+      const meta = SPECIAL_META[id];
+      items.push({
+        id: item.id,
+        kind: item.kind,
+        // key / entryId 必须带上：runImport 要靠它们定位已有块；
+        // 漏了就会退化成「找不到 → 当新增插入」，同一项被写两遍（实测踩到过）。
+        key: item.key,
+        entryId: item.entryId,
+        group: entry?.group ?? meta?.group ?? (item.id.split('.')[0]),
+        label: entry?.label ?? meta?.label ?? labelOf(item.key ?? item.id),
+        sensitive: entry?.sensitive === true || meta?.sensitive === true,
+        action,
+        changed: action !== 'same',
+        current: { present: currentState.present === true, bytes: currentState.bytes, preview: currentState.preview },
+        incoming: {
+          present: true,
+          bytes: item.kind === 'section' ? Buffer.byteLength(`${incomingBlock}\n`, 'utf8') : incomingBuf.length,
+          preview: item.kind === 'section' ? previewOf(incomingBlock) : (item.kind === 'db' ? '(SQLite 数据库)' : previewOf(incomingBuf.toString('utf8'))),
+        },
       });
     }
 
-    const bundledDb = path.join(staging, 'memory', 'memory.db');
-    if (fs.existsSync(bundledDb)) {
-      changes.push({
-        key: 'memory',
-        target: paths.dbPath,
-        action: fs.existsSync(paths.dbPath) ? 'replace' : 'create',
-        bytes: fs.statSync(bundledDb).size,
-        sensitive: true,
-      });
-    }
+    if (items.length === 0) warnings.push('这个包里没有可识别的内容');
+    const changedCount = items.filter((item) => item.changed).length;
 
-    const bundledPersonaText = path.join(staging, 'persona', 'persona.text');
-    const bundledPersona = path.join(staging, 'persona', 'whale.md');
-    if (fs.existsSync(bundledPersonaText)) {
-      const incoming = fs.readFileSync(bundledPersonaText, 'utf8');
-      const currentText = fs.existsSync(paths.patchPath) ? fs.readFileSync(paths.patchPath, 'utf8') : '';
-      const current = extractPersonaText(currentText);
-      changes.push({
-        key: 'persona',
-        target: paths.patchPath,
-        action: current.ok === true ? 'replace' : 'create',
-        chars: incoming.length,
-        existingChars: current.ok === true ? current.text.length : 0,
-        sensitive: false,
-        effective: 'config.persona.text',
-        note: `将把人格写回 dsh-qq-bot 配置的 persona.text（${incoming.length} 字符，当前 ${current.ok === true ? current.text.length : 0} 字符）`,
-      });
-    } else if (fs.existsSync(bundledPersona)) {
-      // 旧包：只有源文件。读出来当成人格文本写回去，并说明这是兼容路径。
-      const legacy = fs.readFileSync(bundledPersona, 'utf8');
-      changes.push({
-        key: 'persona',
-        target: paths.patchPath,
-        action: 'replace',
-        chars: legacy.length,
-        sensitive: false,
-        effective: 'config.persona.text',
-        legacy: true,
-        note: `旧包（只有 persona/whale.md）：将把该文件内容当作 persona.text 写入配置（${legacy.length} 字符）`,
-      });
-      warnings.push('这个包是旧格式：人格只带了源文件 whale.md，已按"把它写进配置"处理；源文件本身不会被单独落盘');
-    }
-
-    if (changes.length === 0) warnings.push('这个包里没有可识别的内容（配置/记忆/人格都没有）');
-
-    return { ok: true, manifest, version, integrity, changes, warnings };
+    return {
+      ok: true,
+      manifest,
+      version,
+      integrity,
+      items,
+      changedCount,
+      itemIds: items.map((item) => item.id),
+      warnings,
+    };
   } catch (error) {
     return { ok: false, error: String(error?.message ?? error) };
   } finally {
@@ -716,11 +799,12 @@ export function previewImport({ bundlePath, paths, force = false }) {
 }
 
 /**
- * 真导入：备份 → 合并配置 → 恢复记忆 → （可选）写人格真源。
- * @param {{bundlePath:string, paths:ReturnType<typeof resolvePaths>, write?:boolean, force?:boolean, include?:string[], now?:Date}} input
+ * 真导入：**只应用选中的项**，逐项执行，任一项失败不回滚其它项。
+ *
+ * @param {{bundlePath:string, paths:ReturnType<typeof resolvePaths>, write?:boolean, force?:boolean, items?:string[], now?:Date}} input
+ *   `items` 为 undefined 时表示"应用预览里所有 changed 项"。
  */
-export function runImport({ bundlePath, paths, write = false, force = false, include, now }) {
-  const picked = include === undefined ? undefined : normalizeInclude(include).include;
+export function runImport({ bundlePath, paths, write = false, force = false, items, now }) {
   const preview = previewImport({ bundlePath, paths, force });
   if (preview.ok !== true) return preview;
   if (preview.version.blocked) {
@@ -730,13 +814,21 @@ export function runImport({ bundlePath, paths, write = false, force = false, inc
     return failure(ERROR_CODES.integrityFailed, preview.integrity.message, { integrity: preview.integrity, preview });
   }
 
-  const wanted = picked === undefined ? preview.changes : preview.changes.filter((c) => picked.includes(c.key));
-  if (wanted.length === 0) {
-    return failure(ERROR_CODES.nothingToImport, '没有要导入的条目（可能被 include 过滤掉了）', { preview });
+  const known = new Set(preview.itemIds);
+  const unknown = (items ?? []).filter((id) => !known.has(id));
+  if (unknown.length > 0) {
+    return failure(ERROR_CODES.tokenMismatch, `这些项不在预览清单里：${unknown.join(', ')}；请重新预览`, { unknown, preview });
+  }
+
+  const picked = items === undefined
+    ? preview.items.filter((item) => item.changed)
+    : preview.items.filter((item) => items.includes(item.id));
+  if (picked.length === 0) {
+    return failure(ERROR_CODES.nothingToImport, '没有要导入的项（未勾选，或所选项目与目标完全一致）', { preview });
   }
 
   if (write !== true) {
-    return { ok: true, written: false, wouldWrite: wanted, preview, message: 'dry-run：没有任何文件被修改' };
+    return { ok: true, written: false, wouldWrite: picked.map((item) => ({ id: item.id, action: item.action })), preview, message: 'dry-run：没有任何文件被修改' };
   }
 
   let opened;
@@ -744,90 +836,92 @@ export function runImport({ bundlePath, paths, write = false, force = false, inc
     opened = openBundle(bundlePath);
     const { staging } = opened;
     const stamp = ts(now ?? new Date());
-    const written = [];
+    const applied = [];
+    const failed = [];
 
-    // 1) 配置：一次备份，多个段依次合并；人格在配置合并之后写，避免被整段替换覆盖
-    const patchChanges = wanted.filter((c) => c.target === paths.patchPath && c.key !== 'persona');
-    const personaChange = wanted.find((c) => c.key === 'persona');
-    if (patchChanges.length > 0 || personaChange !== undefined) {
+    const sectionItems = picked.filter((item) => item.kind === 'section');
+    const fileItems = picked.filter((item) => item.kind === 'file');
+    const dbItems = picked.filter((item) => item.kind === 'db');
+
+    // 1) 配置项：一次读、多项写、末尾落盘一次；失败只影响该项
+    if (sectionItems.length > 0) {
       if (!fs.existsSync(paths.patchPath)) throw new Error(`目标配置不存在：${paths.patchPath}`);
       const backupPath = `${paths.patchPath}.bak-vault-${stamp}`;
       fs.copyFileSync(paths.patchPath, backupPath);
       try { fs.chmodSync(backupPath, 0o600); } catch { /* 忽略 */ }
+      applied.push({ id: 'config-backup', action: 'backup', target: backupPath });
 
       let text = fs.readFileSync(paths.patchPath, 'utf8');
-      for (const change of patchChanges) {
-        const file = change.key === 'config' ? 'cordis-qq-bot.yml' : 'cordis-qq-whale.yml';
-        const entryId = change.key === 'config' ? ENTRY.qqBot : ENTRY.whale;
-        const block = fs.readFileSync(path.join(staging, file), 'utf8').replace(/\s+$/, '');
-        const merged = mergeEntryBlock(text, block, entryId);
-        text = merged.text;
-        written.push({ key: change.key, action: merged.action, target: paths.patchPath });
-      }
-
-      if (personaChange !== undefined) {
-        const bundledPersonaText = path.join(staging, 'persona', 'persona.text');
-        const bundledPersona = path.join(staging, 'persona', 'whale.md');
-        const personaText = fs.existsSync(bundledPersonaText)
-          ? fs.readFileSync(bundledPersonaText, 'utf8')
-          : (fs.existsSync(bundledPersona) ? fs.readFileSync(bundledPersona, 'utf8') : undefined);
-        if (personaText === undefined) {
-          written.push({ key: 'persona', action: 'skipped', reason: '包里没有 persona/persona.text 或 persona/whale.md' });
-        } else {
-          const replaced = replacePersonaText(text, personaText);
-          if (replaced.ok !== true) throw new Error(`写回人格失败：${replaced.error}`);
-          text = replaced.text;
-          written.push({ key: 'persona', action: replaced.action, target: paths.patchPath, chars: personaText.length });
+      for (const item of sectionItems) {
+        try {
+          const block = fs.readFileSync(path.join(staging, itemPath(item.id)), 'utf8').replace(/\s+$/, '');
+          const entryId = item.entryId ?? entryIdOf(item.id);
+          const result = writeItemBlock(text, entryId, item.key, block);
+          if (result.ok !== true) { failed.push({ id: item.id, error: result.error ?? '写入失败' }); continue; }
+          // 写后自检：把这一项再读回来，必须与预期块逐字一致。
+          // 为什么需要：如果包里的块缩进坏了（手工改包、跨工具编辑），直接写回会产出
+          // 结构错误但"看起来成功"的 YAML；宁可判该项失败，也不要把配置写坏。
+          const readBack = readItemBlock(result.text, entryId, item.key);
+          if (readBack !== block) {
+            failed.push({ id: item.id, error: '写入后回读与预期不一致（包内块缩进可能已损坏），该项已跳过' });
+            continue;
+          }
+          text = result.text;
+          applied.push({ id: item.id, action: result.action, target: paths.patchPath });
+        } catch (error) {
+          failed.push({ id: item.id, error: String(error?.message ?? error) });
         }
       }
-
       fs.writeFileSync(paths.patchPath, text, 'utf8');
       try { fs.chmodSync(paths.patchPath, 0o600); } catch { /* 忽略 */ }
-      written.push({ key: 'backup', path: backupPath });
     }
 
-    // 2) 记忆库
-    const memoryChange = wanted.find((c) => c.key === 'memory');
-    if (memoryChange !== undefined) {
-      const bundledDb = path.join(staging, 'memory', 'memory.db');
-      fs.mkdirSync(path.dirname(paths.dbPath), { recursive: true });
-      const moved = [];
-      for (const suffix of ['', '-wal', '-shm']) {
-        const target = paths.dbPath + suffix;
-        if (fs.existsSync(target)) {
-          const backup = `${target}.bak-vault-${stamp}`;
-          fs.renameSync(target, backup);
-          moved.push(backup);
-        }
-      }
-      fs.copyFileSync(bundledDb, paths.dbPath);
-      for (const suffix of ['-wal', '-shm']) {
-        if (fs.existsSync(bundledDb + suffix)) fs.copyFileSync(bundledDb + suffix, paths.dbPath + suffix);
-      }
-      written.push({ key: 'memory', action: 'restored', target: paths.dbPath, backups: moved });
-    }
-
-    // 3) 人格源文件（可选，仅当包里带了 persona/whale.md）
-    //    注意：真正生效的是上面写回配置的 persona.text；这一步只是让仓库里的源文件
-    //    跟配置保持一致，方便以后编辑。旧包没有配置写回能力，才会只落到文件。
-    if (wanted.some((c) => c.key === 'persona')) {
-      const bundledPersona = path.join(staging, 'persona', 'whale.md');
-      if (fs.existsSync(bundledPersona)) {
+    // 2) 人格源文件
+    for (const item of fileItems) {
+      try {
+        const src = path.join(staging, itemPath(item.id));
         fs.mkdirSync(path.dirname(paths.personaPath), { recursive: true });
         if (fs.existsSync(paths.personaPath)) {
           const backup = `${paths.personaPath}.bak-vault-${stamp}`;
           fs.copyFileSync(paths.personaPath, backup);
-          written.push({ key: 'persona-source-backup', path: backup });
+          applied.push({ id: `${item.id}-backup`, action: 'backup', target: backup });
         }
-        fs.copyFileSync(bundledPersona, paths.personaPath);
-        written.push({ key: 'persona-source', action: 'restored', target: paths.personaPath });
+        fs.copyFileSync(src, paths.personaPath);
+        applied.push({ id: item.id, action: 'restored', target: paths.personaPath });
+      } catch (error) {
+        failed.push({ id: item.id, error: String(error?.message ?? error) });
+      }
+    }
+
+    // 3) 记忆库
+    for (const item of dbItems) {
+      try {
+        const src = path.join(staging, itemPath(item.id));
+        fs.mkdirSync(path.dirname(paths.dbPath), { recursive: true });
+        const moved = [];
+        for (const suffix of ['', '-wal', '-shm']) {
+          const target = paths.dbPath + suffix;
+          if (fs.existsSync(target)) {
+            const backup = `${target}.bak-vault-${stamp}`;
+            fs.renameSync(target, backup);
+            moved.push(backup);
+          }
+        }
+        fs.copyFileSync(src, paths.dbPath);
+        for (const suffix of ['-wal', '-shm']) {
+          if (fs.existsSync(src + suffix)) fs.copyFileSync(src + suffix, paths.dbPath + suffix);
+        }
+        applied.push({ id: item.id, action: 'restored', target: paths.dbPath, backups: moved });
+      } catch (error) {
+        failed.push({ id: item.id, error: String(error?.message ?? error) });
       }
     }
 
     return {
       ok: true,
       written: true,
-      changes: written,
+      applied,
+      failed,
       preview,
       nextSteps: [
         '确认配置里的 onebot.wsUrl / onebot.accessToken / auth.owners / group.allow 是这台机器的值',
@@ -840,4 +934,9 @@ export function runImport({ bundlePath, paths, write = false, force = false, inc
   } finally {
     if (opened !== undefined) opened.cleanup();
   }
+}
+
+/** item id → 条目 id（写回配置时用）。 */
+function entryIdOf(id) {
+  return id.startsWith('whale.') ? ENTRY.whale : ENTRY.qqBot;
 }

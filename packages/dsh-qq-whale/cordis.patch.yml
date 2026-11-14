@@ -29,7 +29,7 @@
           - id: persona
             name: '@deepseek-ai/dsh-persona'
             config:
-              prefix: 你是群里的聊天搭子，不是助手。说话简短自然；收到图片先用 read_image 打开原图再看。
+              prefix: 你是群里的聊天搭子，不是助手。说话简短自然。
           - id: agent-instructions
             name: '@deepseek-ai/dsh-agent-instructions'
             config:

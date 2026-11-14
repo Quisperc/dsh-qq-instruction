@@ -108,7 +108,7 @@ function bootPlugin(env) {
 function tamperBundle(bundlePath) {
   const work = fs.mkdtempSync(path.join(os.tmpdir(), 'vault-tamper-'));
   execFileSync('tar', ['xzf', bundlePath, '-C', work], { stdio: 'ignore' });
-  fs.writeFileSync(path.join(work, 'cordis-qq-bot.yml'), '- id: dsh-qq-bot\n  config:\n    hacked: true\n', 'utf8');
+  fs.writeFileSync(path.join(work, 'items', 'qqbot.onebot.yml'), '- id: dsh-qq-bot\n  config:\n    hacked: true\n', 'utf8');
   const out = `${bundlePath}.tampered.tar.gz`;
   execFileSync('tar', ['czf', out, '-C', work, '.'], { stdio: 'ignore' });
   fs.rmSync(work, { recursive: true, force: true });
@@ -208,7 +208,7 @@ test('verifyBundleIntegrity：正常包通过；被改过的包报 mismatched', 
     const { routes } = bootPlugin(env);
     const exported = await call(
       routes.get('/dsh-qq-vault/export'),
-      makeReq({ url: '/dsh-qq-vault/export?include=config' }),
+      makeReq({ url: '/dsh-qq-vault/export?items=qqbot.onebot' }),
     );
     assert.equal(exported.status, 200);
     const bundlePath = path.join(env.backupDir, String(exported.headers['content-disposition']).match(/filename="(.+)"/)[1]);
@@ -233,7 +233,7 @@ test('verifyBundleIntegrity：正常包通过；被改过的包报 mismatched', 
     assert.equal(badPreview.status, 200);
     assert.equal(badPreview.json.integrity.ok, false);
     assert.equal(badPreview.json.integrity.blocked, true);
-    assert.ok(badPreview.json.integrity.mismatched.some((m) => m.path === 'cordis-qq-bot.yml'));
+    assert.ok(badPreview.json.integrity.mismatched.some((m) => m.path === 'items/qqbot.onebot.yml'));
 
     // force 之后不 blocked（但仍如实报告 ok:false）
     const forced = await call(
@@ -272,7 +272,7 @@ test('token 错误码：缺失 / 无效 / 路径不匹配（不消费）/ 已使
   const env = makeEnv();
   try {
     const { routes } = bootPlugin(env);
-    const exported = await call(routes.get('/dsh-qq-vault/export'), makeReq({ url: '/dsh-qq-vault/export?include=config' }));
+    const exported = await call(routes.get('/dsh-qq-vault/export'), makeReq({ url: '/dsh-qq-vault/export?items=qqbot.onebot' }));
     const bundlePath = path.join(env.backupDir, String(exported.headers['content-disposition']).match(/filename="(.+)"/)[1]);
 
     // 缺失
@@ -298,11 +298,11 @@ test('token 错误码：缺失 / 无效 / 路径不匹配（不消费）/ 已使
     assert.equal(mismatch.json.code, 'token-mismatch');
 
     // token 仍可用于原文件
-    const ok = await call(routes.get('/dsh-qq-vault/import'), makeReq({ url: `/dsh-qq-vault/import?write=1&path=${encodeURIComponent(bundlePath)}&token=${token}` }));
+    const ok = await call(routes.get('/dsh-qq-vault/import'), makeReq({ url: `/dsh-qq-vault/import?write=1&items=qqbot.onebot&path=${encodeURIComponent(bundlePath)}&token=${token}` }));
     assert.equal(ok.status, 200, `原文件应仍可导入，实际：${ok.text.slice(0, 200)}`);
 
     // 重放：同 token 再来一次 → token-used
-    const replay = await call(routes.get('/dsh-qq-vault/import'), makeReq({ url: `/dsh-qq-vault/import?write=1&path=${encodeURIComponent(bundlePath)}&token=${token}` }));
+    const replay = await call(routes.get('/dsh-qq-vault/import'), makeReq({ url: `/dsh-qq-vault/import?write=1&items=qqbot.onebot&path=${encodeURIComponent(bundlePath)}&token=${token}` }));
     assert.equal(replay.status, 400);
     assert.equal(replay.json.code, 'token-used');
   } finally {
@@ -315,7 +315,7 @@ test('token 过期：超过 5 分钟后报 token-expired（用 Date.now 替身�
   const realNow = Date.now;
   try {
     const { routes } = bootPlugin(env);
-    const exported = await call(routes.get('/dsh-qq-vault/export'), makeReq({ url: '/dsh-qq-vault/export?include=config' }));
+    const exported = await call(routes.get('/dsh-qq-vault/export'), makeReq({ url: '/dsh-qq-vault/export?items=qqbot.onebot' }));
     const bundlePath = path.join(env.backupDir, String(exported.headers['content-disposition']).match(/filename="(.+)"/)[1]);
     const preview = await call(routes.get('/dsh-qq-vault/preview-import'), makeReq({ url: `/dsh-qq-vault/preview-import?path=${encodeURIComponent(bundlePath)}` }));
     const token = preview.json.token;
@@ -375,13 +375,13 @@ test('导出包里的 gzip 头与 manifest 早于清单（walkFiles 不会把 ma
   const env = makeEnv();
   try {
     const { routes } = bootPlugin(env);
-    const exported = await call(routes.get('/dsh-qq-vault/export'), makeReq({ url: '/dsh-qq-vault/export?include=config,persona' }));
+    const exported = await call(routes.get('/dsh-qq-vault/export'), makeReq({ url: '/dsh-qq-vault/export?items=qqbot.onebot,qqbot.persona' }));
     const buf = exported.buf;
     assert.equal(buf[0], 0x1f);
     assert.equal(buf[1], 0x8b);
     const tar = zlib.gunzipSync(buf).toString('latin1');
     assert.ok(tar.includes('manifest.json'));
-    assert.ok(tar.includes('cordis-qq-bot.yml'));
+    assert.ok(tar.includes('items/qqbot.onebot.yml'), '逐项后包内是 items/<id>.yml');
   } finally {
     fs.rmSync(env.root, { recursive: true, force: true });
   }
@@ -404,8 +404,8 @@ test('路由注册走 ctx.effect：卸载时 disposer 必须真的把路由摘�
     };
     apply(ctx, { home: env.root, profile: 'web', workspace: env.workspace, repoRoot: env.repoRoot });
 
-    assert.equal(routes.size, 7, '应注册 7 条路由');
-    assert.equal(effects.length, 7, '每条路由都应登记一个 effect');
+    assert.equal(routes.size, 8, '应注册 8 条路由（含逐项发现的 /items）');
+    assert.equal(effects.length, 8, '每条路由都应登记一个 effect（含 /items）');
     assert.ok(effects.every((entry) => typeof entry.dispose === 'function'), 'effect 回调必须返回 disposer');
 
     // 模拟插件卸载：执行所有 disposer，路由必须消失

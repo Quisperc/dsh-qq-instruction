@@ -2,6 +2,60 @@
 
 > 只记这个包自己的变化。仓库级变化看根目录 `CHANGELOG.md`。
 
+## [0.5.0] - 2026-11-14
+
+> 用户诉求：「改成每一个导入的配置项都进行对比，由用户进行多选确认再导入；
+> 导出也更新为根据每一个配置项，由用户多选后确认导出。」
+> 导火索是 0.4.0 的**侵入式**行为：导入时把整个 `- id: dsh-qq-bot` 段整段替换，
+> 用户只勾了一项，没勾的那些项连同注释一起被覆盖。
+
+### Breaking — 从「整段替换」改为「逐配置项」
+
+- 配置项 = `config:` 下的一级子键（`onebot` / `persona` / `group` / `reply` / …），
+  **动态发现**，不再硬编码清单：qq-bot 0.14 新增的 `reply.bubbleGapMinMs`、
+  `sticker.*` 会自动出现在清单里。
+- 导出按项打包：`items/<item id>.yml`（如 `items/qqbot.onebot.yml`），
+  `manifest.items` 逐项带 `{id, group, label, kind, path, bytes, sha256}`。
+- 导入逐项对比：`/preview-import` 返回每项的
+  `{action: same|replace|create, changed, current{}, incoming{}, sensitive}`，
+  客户端只允许勾选 changed 的行。
+- `/import?items=a,b,c` **只应用勾选的项**；未勾选的一律不动。
+  逐项执行，任一项失败不回滚其它项，如实返回 `applied[]` 与 `failed[]`。
+- 一次性确认码绑定「路径 + 预览时的 item 集合」：换包拒绝（token-mismatch），
+  应用一个没预览过的项也拒绝；应用**子集**允许（比预览更少永远更安全）。
+
+### Added
+
+- `GET /items`：列出本机可导出的全部配置项（含 `present` / `bytes` / `sensitive`）。
+- `capabilities` 增加 `granular: true`、`itemsEndpoint`、`groups`。
+- 写后自检：写入后重新扫描该项，回读内容与预期不一致就判该项失败并跳过，
+  绝不把破损的块（缩进坏了的手工包）落进配置。
+- `test/granular.test.mjs`（6 项）：导出 3 项 → 预览只报 3 项 → 只应用 1 项 →
+  **其余字节与注释逐字不变**；动态发现 0.14 新键；缺段时 create；未勾项绝不写。
+
+### Why 不用 YAML 库（重要设计说明）
+
+- `yaml`（eemeli，能保注释）只在 DSH 自己的 `node_modules` 里，插件运行时**解析不到**；
+- `js-yaml` 会把整份文档重新序列化：注释全丢、行宽与引号风格全变。
+  用户配置里那些「为什么这么写」的注释是资产，不能因为导入一次备份就没。
+- 所以走**行扫描**：按缩进与键名定位一级配置块，整块替换/插入，
+  其余字节原样保留（`lib/items.js`，行扫描思路沿自早期 `persona.js`，该模块已在本次删除）。
+
+### Changed
+
+- `/plan`、`/export` 参数从 `include=` 改为 `items=`（`include` 那套键已删除）。
+- `verifyBundleIntegrity` 优先读 `manifest.items`（旧包回落 `manifest.files`）。
+- 0.4.0 及以前的旧格式包（只有 `files` 没有 `items`）：**拒绝猜测**，
+  预览给出「这是旧格式，请用新版重新导出」的提示，不再按整段替换冒险写入。
+
+### Removed
+
+- `mergeEntryBlock` / `normalizeInclude` / `INCLUDE_KEYS`（整段替换的遗留 API）。
+  对应测试断言一并删除，理由：语义已被 item 级操作取代，留着会诱导后来者再走回整段替换。
+- `lib/persona.js` 与其 10 项测试：人格变成配置项 `qqbot.persona` 之后，
+  那个模块在运行路径上**已无人引用**（只剩测试自娱自乐）。块标量读写能力由 `lib/items.js` 覆盖，
+  留着是重复实现，删。
+
 ## [0.4.0] - 2026-11-14
 
 > 修用户实际反馈的两件事：**人格备份导了不生效**、**想直接上传备份包**。

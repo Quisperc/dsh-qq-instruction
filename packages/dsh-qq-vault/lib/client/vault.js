@@ -63,13 +63,12 @@ window.__ModuleLoader__.load({
       return 'HTTP ' + status;
     }
 
-    /** 四个可勾选项；`sensitive` 的会在 UI 上标红。 */
-    var ITEMS = [
-      { key: 'config', label: 'QQBot 配置', hint: 'cordis.patch.yml 里的 dsh-qq-bot 段（含 NapCat token、QQ 号、人设卡）', sensitive: true },
-      { key: 'persona', label: '人格（生效值）', hint: '备份 cordis.patch.yml 里 dsh-qq-bot.config.persona.text——这才是机器人真正用的人格；仓库 persona/whale.md 仅作附带副本', sensitive: false },
-      { key: 'memory', label: '记忆库', hint: 'QQ_msg/.dsh-meow/memory.db（群聊与私聊共用，可能含他人隐私）', sensitive: true },
-      { key: 'whaleConfig', label: 'whale 配置段', hint: 'cordis.patch.yml 里的 dsh-qq-whale 段（含工具白名单等四项）', sensitive: false },
-    ];
+    /**
+     * 0.5.0 起配置项**动态发现**：不再写死四个键，改为调 host 的 `/items` 拿清单
+     * （qq-bot 0.14 新增的 reply.bubbleGapMinMs / sticker.* 之类会自动出现）。
+     * 这里只保留一份「拿不到 host 时的兜底说明」。
+     */
+    var ITEMS_FALLBACK_TEXT = '拿不到配置项清单（host 未响应）：请确认 dsh-qq-vault 已启用。';
 
     function messageOf(error) {
       if (error === null || error === undefined) return '未知错误';
@@ -95,9 +94,9 @@ window.__ModuleLoader__.load({
         });
     }
 
-    /** 拼下载 URL（浏览器直连，带 cookie 过 browserAuth）。 */
-    function exportUrl(keys) {
-      return API + '/export' + (keys.length > 0 ? '?include=' + encodeURIComponent(keys.join(',')) : '');
+    /** 拼下载 URL（浏览器直连，带 cookie 过 browserAuth）。items 为 item id 列表。 */
+    function exportUrl(ids) {
+      return API + '/export' + (ids.length > 0 ? '?items=' + encodeURIComponent(ids.join(',')) : '');
     }
 
     function formatBytes(bytes) {
@@ -114,10 +113,18 @@ window.__ModuleLoader__.load({
     var input = { fontSize: 12, padding: '4px 8px', width: '100%', boxSizing: 'border-box' };
 
     /** 主卡片。 */
+    /** 主卡片：导出按配置项多选、导入按项对比后多选应用。 */
     function VaultSection() {
-      var includeHook = useState({ config: false, persona: false, memory: false, whaleConfig: false });
-      var include = includeHook[0];
-      var setInclude = includeHook[1];
+      // 导出侧：host 报上来的 item 清单 + 本地勾选集合
+      var itemsHook = useState([]);
+      var items = itemsHook[0];
+      var setItems = itemsHook[1];
+      var groupsHook = useState([]);
+      var groups = groupsHook[0];
+      var setGroups = groupsHook[1];
+      var pickedHook = useState({});
+      var picked = pickedHook[0];
+      var setPicked = pickedHook[1];
 
       var planHook = useState(null);
       var plan = planHook[0];
@@ -139,9 +146,14 @@ window.__ModuleLoader__.load({
       var preview = previewHook[0];
       var setPreview = previewHook[1];
 
-      var confirmHook = useState(false);
-      var confirmed = confirmHook[0];
-      var setConfirmed = confirmHook[1];
+      // 导入侧：勾选要应用的项（只有 changed 的才可选）
+      var impickedHook = useState({});
+      var impicked = impickedHook[0];
+      var setImpicked = impickedHook[1];
+
+      var expandHook = useState({});
+      var expand = expandHook[0];
+      var setExpand = expandHook[1];
 
       var importHook = useState(null);
       var imported = importHook[0];
@@ -167,7 +179,6 @@ window.__ModuleLoader__.load({
       var cleanupConfirm = cleanupConfirmHook[0];
       var setCleanupConfirm = cleanupConfirmHook[1];
 
-      /** 刷新备份目录列表（导出后、清理后都调一次）。 */
       function refreshBundles() {
         return getJson('/list-bundles', {})
           .then(function (res) {
@@ -176,26 +187,52 @@ window.__ModuleLoader__.load({
           .catch(function () { /* 列表拿不到不影响手动填路径 */ });
       }
 
-      // 首次挂载：拉能力清单（拿 backupDir 与"未实现项"）与备份包列表
+      function refreshItems() {
+        return getJson('/items', {})
+          .then(function (res) {
+            var data = res.data;
+            if (data === null || data.ok !== true) return;
+            setItems(data.items || []);
+            setGroups(data.groups || []);
+          })
+          .catch(function () { /* 忽略：UI 会显示兜底文案 */ });
+      }
+
       useEffect(function () {
         getJson('/capabilities', {})
           .then(function (res) { if (res.data !== null && res.data.ok === true) setCaps(res.data); })
           .catch(function () { /* 忽略 */ });
+        refreshItems();
         refreshBundles();
       }, []);
 
-      function selectedKeys() {
-        var keys = [];
-        for (var i = 0; i < ITEMS.length; i += 1) {
-          if (include[ITEMS[i].key] === true) keys.push(ITEMS[i].key);
+      /** 已勾选的 item id（导出侧）。 */
+      function pickedIds() {
+        var out = [];
+        for (var i = 0; i < items.length; i += 1) {
+          if (picked[items[i].id] === true) out.push(items[i].id);
         }
-        return keys;
+        return out;
       }
 
-      function onToggle(itemKey) {
-        setInclude(function (prev) {
-          var next = { config: prev.config, persona: prev.persona, memory: prev.memory, whaleConfig: prev.whaleConfig };
-          next[itemKey] = prev[itemKey] !== true;
+      function togglePicked(id) {
+        setPicked(function (prev) {
+          var next = {};
+          for (var key in prev) if (Object.prototype.hasOwnProperty.call(prev, key)) next[key] = prev[key];
+          next[id] = prev[id] !== true;
+          return next;
+        });
+        setPlan(null);
+      }
+
+      /** 整组勾选 / 取消。 */
+      function toggleGroup(groupName, on) {
+        setPicked(function (prev) {
+          var next = {};
+          for (var key in prev) if (Object.prototype.hasOwnProperty.call(prev, key)) next[key] = prev[key];
+          for (var i = 0; i < items.length; i += 1) {
+            if (items[i].group === groupName) next[items[i].id] = on;
+          }
           return next;
         });
         setPlan(null);
@@ -204,7 +241,7 @@ window.__ModuleLoader__.load({
       function doPlan() {
         setBusy('plan');
         setError('');
-        getJson('/plan', { include: selectedKeys().join(',') })
+        getJson('/plan', { items: pickedIds().join(',') })
           .then(function (res) {
             var data = res.data;
             if (data === null || data.ok !== true) { setError(failureText(data, res.status)); return; }
@@ -218,7 +255,9 @@ window.__ModuleLoader__.load({
       function doExport() {
         setError('');
         try {
-          var url = exportUrl(selectedKeys());
+          var ids = pickedIds();
+          if (ids.length === 0) { setError('先勾选要导出的项（至少一项）'); return; }
+          var url = exportUrl(ids);
           var link = document.createElement('a');
           link.href = url;
           link.download = '';
@@ -226,7 +265,6 @@ window.__ModuleLoader__.load({
           document.body.appendChild(link);
           link.click();
           document.body.removeChild(link);
-          // 下载是异步的，稍等再刷新列表，让新包出现在下拉里
           setTimeout(function () { refreshBundles(); }, 1200);
         } catch (err) {
           setError(messageOf(err));
@@ -236,13 +274,11 @@ window.__ModuleLoader__.load({
       /**
        * 上传本地文件到 host（POST /api/dsh-qq-vault/upload）。
        * 为什么不是 webServer 路由：它只放行 GET/HEAD；上传走 Connection 的 exact 路由表。
-       * 失败时不假装成功——把原因显示出来，让用户回退到从列表选/填路径。
        */
       function doUpload(file) {
         if (!file) return;
         setBusy('upload');
         setError('');
-        // Content-Length 由浏览器自动带；这里只需 application/octet-stream
         fetch(UPLOAD_PATH, {
           method: 'POST',
           credentials: 'same-origin',
@@ -259,8 +295,8 @@ window.__ModuleLoader__.load({
               setBundlePath(data.path || '');
               setPreview(null);
               setImported(null);
-              setConfirmed(false);
-              setUploadNote('已上传 ' + (data.bytes !== undefined ? data.bytes : 0) + ' 字节，点「预览将导入什么」继续');
+              setImpicked({});
+              setUploadNote('已上传 ' + (data.bytes !== undefined ? data.bytes : 0) + ' 字节，点「预览差异」继续');
             });
           })
           .catch(function (err) {
@@ -275,27 +311,44 @@ window.__ModuleLoader__.load({
         setError('');
         setPreview(null);
         setImported(null);
-        setConfirmed(false);
+        setImpicked({});
         getJson('/preview-import', { path: bundlePath })
           .then(function (res) {
             var data = res.data;
             if (data === null || data.ok !== true) { setError(failureText(data, res.status)); return; }
             setPreview(data);
+            // 默认勾上所有 changed 项：用户点「应用」就得到「把差异同步过来」的直觉行为
+            var auto = {};
+            var list = data.items || [];
+            for (var i = 0; i < list.length; i += 1) if (list[i].changed === true) auto[list[i].id] = true;
+            setImpicked(auto);
           })
           .catch(function (err) { setError(messageOf(err)); })
           .then(function () { setBusy(''); });
       }
 
+      function importPickedIds() {
+        var out = [];
+        var list = preview !== null ? (preview.items || []) : [];
+        for (var i = 0; i < list.length; i += 1) {
+          if (impicked[list[i].id] === true && list[i].changed === true) out.push(list[i].id);
+        }
+        return out;
+      }
+
       function doImport() {
         if (preview === null || preview.token === undefined) return;
+        var ids = importPickedIds();
+        if (ids.length === 0) { setError('先勾选要应用的项（只有"将替换/将新增"的行可选）'); return; }
         setBusy('import');
         setError('');
-        getJson('/import', { path: preview.path, write: '1', token: preview.token })
+        getJson('/import', { path: preview.path, write: '1', token: preview.token, items: ids.join(',') })
           .then(function (res) {
             var data = res.data;
             if (data === null || data.ok !== true) { setError(failureText(data, res.status)); return; }
             setImported(data);
             setPreview(null);
+            refreshItems();
           })
           .catch(function (err) { setError(messageOf(err)); })
           .then(function () { setBusy(''); });
@@ -320,73 +373,95 @@ window.__ModuleLoader__.load({
 
       children.push(h('div', { key: 'title', style: { fontWeight: 600, marginBottom: 4 } }, 'QQBot 备份'));
       children.push(h('div', { key: 'desc', style: muted },
-        '导出/导入 QQBot 的配置、人设与记忆。导出为只读；导入会先备份再写入，且需要一次性确认码。'));
+        '按配置项导出/导入：勾哪项就只动哪项，其余字节（含注释）原样保留。导入会先备份、再逐项写入，并需要一次性确认码。'));
 
-      // —— 勾选区 ——
-      var itemNodes = ITEMS.map(function (item) {
-        return h('label', {
-          key: item.key,
-          style: { display: 'block', margin: '6px 0', cursor: 'pointer' },
-        }, [
-          h('input', {
-            key: 'cb',
-            type: 'checkbox',
-            checked: include[item.key] === true,
-            onChange: function () { onToggle(item.key); },
-            style: { marginRight: 8, verticalAlign: 'middle' },
-          }),
-          h('span', { key: 'lb', style: { fontSize: 13 } }, item.label),
-          h('div', { key: 'ht', style: muted }, item.hint),
-          item.sensitive ? h('div', { key: 'warn', style: danger }, '⚠ 含敏感信息（token / 隐私），只走私密通道') : null,
-        ]);
-      });
-      /**
-       * 未实现项：**显示为禁用行**而不是消失。
-       * 用图形上"灰掉"的 checkbox，让用户明确知道"这是没做，不是没找到"。
-       */
-      var skippedItems = caps !== null && caps.skipped !== undefined && caps.skipped !== null
+      // ── ① 导出：按组勾选 ───────────────────────────────────────────────
+      var groupNodes = [];
+      for (var gi = 0; gi < groups.length; gi += 1) {
+        (function (group) {
+          var list = items.filter(function (item) { return item.group === group.group; });
+          if (list.length === 0) return;
+          var allPicked = list.every(function (item) { return picked[item.id] === true; });
+          var rows = list.map(function (item) {
+            return h('label', {
+              key: 'it-' + item.id,
+              style: { display: 'block', margin: '4px 0 4px 18px', cursor: 'pointer' },
+            }, [
+              h('input', {
+                key: 'cb',
+                type: 'checkbox',
+                checked: picked[item.id] === true,
+                onChange: function () { togglePicked(item.id); },
+                style: { marginRight: 8, verticalAlign: 'middle' },
+              }),
+              h('span', { key: 'lb', style: { fontSize: 13 } }, item.label),
+              h('span', { key: 'by', style: Object.assign({}, muted, { marginLeft: 8 }) }, formatBytes(item.bytes)),
+              item.sensitive ? h('span', { key: 'w', style: Object.assign({}, danger, { marginLeft: 8 }) }, '⚠ 敏感') : null,
+            ]);
+          });
+          groupNodes.push(h('div', { key: 'g-' + group.group, style: { marginBottom: 10 } }, [
+            h('label', { key: 'hd', style: { display: 'block', cursor: 'pointer', fontWeight: 600, fontSize: 13 } }, [
+              h('input', {
+                key: 'cb',
+                type: 'checkbox',
+                checked: allPicked,
+                onChange: function () { toggleGroup(group.group, allPicked !== true); },
+                style: { marginRight: 8, verticalAlign: 'middle' },
+              }),
+              h('span', { key: 't' }, group.label + '（' + group.count + ' 项）'),
+            ]),
+            group.present === false && group.note !== undefined
+              ? h('div', { key: 'note', style: Object.assign({}, muted, { marginLeft: 18 }) }, group.note)
+              : null,
+          ].concat(rows)));
+        }(groups[gi]));
+      }
+
+      var skippedList = caps !== null && caps.skipped !== undefined && caps.skipped !== null
         ? caps.skipped
         : [{ key: 'sessions', label: '会话历史', reason: '暂不支持（见文档）' }];
-      var sessionsNode = h('label', {
-        key: 'skipped-items',
-        style: { display: 'block', margin: '6px 0', cursor: 'not-allowed', opacity: 0.55 },
-      }, [
-        h('div', { key: 'hd', style: { fontSize: 12, marginBottom: 4 } }, '以下数据项暂不支持（显示为禁用）'),
-        skippedItems.map(function (item) {
-          return h('div', { key: 'sk' + item.key, style: { marginBottom: 4 } }, [
-            h('input', {
-              key: 'cb',
-              type: 'checkbox',
-              checked: false,
-              disabled: true,
-              style: { marginRight: 8, verticalAlign: 'middle' },
-            }),
+      var sessionsNode = h('div', {
+        key: 'skipped',
+        style: { marginTop: 10, paddingTop: 8, borderTop: '1px dashed var(--dsh-border, #d6d6d6)', opacity: 0.55 },
+      }, [h('div', { key: 'hd', style: muted }, '以下数据项暂不支持（显示为禁用）')].concat(
+        skippedList.map(function (item) {
+          return h('label', { key: 'sk-' + item.key, style: { display: 'block', margin: '4px 0', cursor: 'not-allowed' } }, [
+            h('input', { key: 'cb', type: 'checkbox', checked: false, disabled: true, style: { marginRight: 8, verticalAlign: 'middle' } }),
             h('span', { key: 'lb', style: { fontSize: 13 } }, item.label || item.key),
             h('div', { key: 'rs', style: muted }, item.reason || ''),
           ]);
         }),
-      ]);
+      ));
 
-      children.push(h('div', { key: 'items', style: box }, itemNodes.concat([sessionsNode])));
+      children.push(h('div', { key: 'items', style: box }, [
+        h('div', { key: 't', style: { fontWeight: 600, marginBottom: 8 } }, '① 选择要导出的配置项'),
+        items.length === 0
+          ? h('div', { key: 'none', style: muted }, ITEMS_FALLBACK_TEXT)
+          : h('div', { key: 'list' }, groupNodes),
+        sessionsNode,
+      ]));
 
-      // —— 导出区 ——
       var backupDirHint = caps !== null && caps.backupDir !== undefined && caps.backupDir !== null
         ? '包会落在 ' + caps.backupDir
         : '';
       children.push(h('div', { key: 'exp', style: Object.assign({}, box, { marginTop: 12 }) }, [
-        h('div', { key: 't', style: { fontWeight: 600, marginBottom: 8 } }, '① 导出'),
         h('div', { key: 'b' }, [
-          h('button', { key: 'plan', onClick: doPlan, disabled: busy !== '', style: button }, busy === 'plan' ? '计算中…' : '预览将导出什么'),
-          h('button', { key: 'go', onClick: doExport, disabled: busy !== '', style: Object.assign({}, button, { marginLeft: 8 }) }, '导出并下载 tar.gz'),
+          h('button', { key: 'plan', onClick: doPlan, disabled: busy !== '' || pickedIds().length === 0, style: button },
+            busy === 'plan' ? '计算中…' : '预览将导出什么'),
+          h('button', {
+            key: 'go',
+            onClick: doExport,
+            disabled: busy !== '' || pickedIds().length === 0,
+            style: Object.assign({}, button, { marginLeft: 8 }),
+          }, '导出选中项（' + pickedIds().length + ' 项）'),
         ]),
-        h('div', { key: 'h', style: muted },
-          '导出会在服务器生成备份包并直接下载；未勾选任何项时导出全部可导出项。' + backupDirHint),
+        h('div', { key: 'h', style: muted }, '按项打包，导入时可只挑其中几项应用。' + backupDirHint),
       ]));
 
       if (plan !== null && plan.ok === true) {
         var fileNodes = (plan.files || []).map(function (file, index) {
           return h('li', { key: 'f' + index, style: { fontSize: 12 } },
-            file.path + ' — ' + formatBytes(file.bytes) + (file.sensitive ? '（敏感）' : ''));
+            (file.label || file.id) + ' — ' + formatBytes(file.bytes) + (file.sensitive ? '（敏感）' : ''));
         });
         children.push(h('div', { key: 'plan', style: box }, [
           h('div', { key: 't', style: { fontSize: 13, marginBottom: 6 } },
@@ -396,18 +471,14 @@ window.__ModuleLoader__.load({
         ]));
       }
 
-      // —— 导入区（两步：预览拿 token → 确认执行）——
+      // ── ② 导入：选包 → 预览差异 → 勾选应用 ─────────────────────────────
       var bundleOptions = bundles.map(function (file) {
         return h('option', { key: file.name, value: file.path },
           file.name + '  (' + formatBytes(file.bytes) + ' · ' + String(file.mtime || '').slice(0, 16).replace('T', ' ') + ')');
       });
       children.push(h('div', { key: 'imp', style: Object.assign({}, box, { marginTop: 12 }) }, [
-        h('div', { key: 't', style: { fontWeight: 600, marginBottom: 8 } }, '② 导入（先预览，再确认）'),
-        h('div', { key: 'h', style: muted },
-          '浏览器不能上传文件（HTTP 层只放行 GET）。备份包需先在服务器上：'
-          + (caps !== null && caps.backupDir ? caps.backupDir : '$DSH_HOME/backups/qqbot-vault/')
-          + '。可以从下面选一个，也可以直接填绝对路径。'),
-        h('div', { key: 'pick', style: { marginTop: 8 } }, [
+        h('div', { key: 't', style: { fontWeight: 600, marginBottom: 8 } }, '② 导入（先预览逐项差异，再勾选应用）'),
+        h('div', { key: 'pick', style: { marginTop: 4 } }, [
           h('select', {
             key: 'sel',
             value: '',
@@ -419,15 +490,14 @@ window.__ModuleLoader__.load({
           ].concat(bundleOptions)),
           h('button', {
             key: 'ref',
-            onClick: function () { setError(''); refreshBundles(); },
+            onClick: function () { setError(''); refreshBundles(); refreshItems(); },
             disabled: busy !== '',
             style: Object.assign({}, button, { fontSize: 12 }),
-          }, '刷新列表'),
+          }, '刷新'),
         ]),
-        // 上传：只有 host 报 supported 时才显示（Connection 的 POST 路由不可用时自动隐藏）
         caps !== null && caps.upload !== undefined && caps.upload.supported === true
           ? h('div', { key: 'up', style: { marginTop: 8 } }, [
-              h('label', { key: 'l', style: { display: 'block', fontSize: 12, color: muted } }, '或直接上传本地文件（放到备份目录的 uploads/ 下）：'),
+              h('label', { key: 'l', style: { display: 'block', fontSize: 12, color: muted } }, '或直接上传本地备份包：'),
               h('input', {
                 key: 'f',
                 type: 'file',
@@ -459,64 +529,136 @@ window.__ModuleLoader__.load({
           onClick: doPreview,
           disabled: busy !== '' || String(bundlePath).trim() === '',
           style: Object.assign({}, button, { marginTop: 8 }),
-        }, busy === 'preview' ? '解析中…' : '预览将导入什么'),
+        }, busy === 'preview' ? '解析中…' : '预览差异'),
       ]));
 
       if (preview !== null && preview.ok === true) {
-        var changeNodes = (preview.changes || []).map(function (change, index) {
-          var actionText = change.action === 'append' ? '追加' : change.action === 'create' ? '新建' : '替换';
-          return h('li', { key: 'c' + index, style: { fontSize: 12 } },
-            change.key + ' → ' + actionText + ' ' + change.target + (change.sensitive ? '（敏感）' : ''));
+        var pvRows = (preview.items || []).map(function (item) {
+          var actionText = item.action === 'same' ? '未变' : (item.action === 'create' ? '将新增' : '将替换');
+          var actionStyle = item.action === 'same'
+            ? Object.assign({}, muted, { color: 'var(--dsh-success, #2d7d46)' })
+            : Object.assign({}, muted, { color: 'var(--dsh-danger, #c0392b)' });
+          var open = expand[item.id] === true;
+          return h('div', { key: 'pv-' + item.id, style: { borderTop: '1px solid var(--dsh-border, #eee)', padding: '6px 0' } }, [
+            h('label', { key: 'row', style: { display: 'flex', alignItems: 'center', cursor: item.changed ? 'pointer' : 'not-allowed', opacity: item.changed ? 1 : 0.6 } }, [
+              h('input', {
+                key: 'cb',
+                type: 'checkbox',
+                checked: impicked[item.id] === true,
+                disabled: item.changed !== true,
+                onChange: function () {
+                  setImpicked(function (prev) {
+                    var next = {};
+                    for (var key in prev) if (Object.prototype.hasOwnProperty.call(prev, key)) next[key] = prev[key];
+                    next[item.id] = prev[item.id] !== true;
+                    return next;
+                  });
+                },
+                style: { marginRight: 8, verticalAlign: 'middle' },
+              }),
+              h('span', { key: 'lb', style: { fontSize: 13, flex: 1 } }, item.label || item.id),
+              h('span', { key: 'ac', style: Object.assign({}, actionStyle, { marginLeft: 8, fontSize: 12 }) }, actionText),
+              h('span', { key: 'sz', style: Object.assign({}, muted, { marginLeft: 8 }) },
+                formatBytes(item.current.bytes) + ' → ' + formatBytes(item.incoming.bytes)),
+              item.sensitive ? h('span', { key: 'w', style: Object.assign({}, danger, { marginLeft: 8 }) }, '⚠') : null,
+            ]),
+            h('button', {
+              key: 'exp',
+              onClick: function () {
+                setExpand(function (prev) {
+                  var next = {};
+                  for (var key in prev) if (Object.prototype.hasOwnProperty.call(prev, key)) next[key] = prev[key];
+                  next[item.id] = prev[item.id] !== true;
+                  return next;
+                });
+              },
+              style: { marginLeft: 24, marginTop: 4, fontSize: 11, padding: '2px 8px', borderRadius: 4, cursor: 'pointer' },
+            }, open ? '收起预览' : '展开对比'),
+            open
+              ? h('div', { key: 'cmp', style: { marginLeft: 24, marginTop: 6, display: 'flex', gap: 8 } }, [
+                  h('div', { key: 'cur', style: { flex: 1, minWidth: 0 } }, [
+                    h('div', { key: 't', style: muted }, '当前'),
+                    h('pre', { key: 'p', style: { fontSize: 11, whiteSpace: 'pre-wrap', wordBreak: 'break-all', margin: 0, maxHeight: 160, overflow: 'auto', background: 'var(--dsh-surface, #f7f7f7)', padding: 6, borderRadius: 4 } },
+                      item.current.present === true ? item.current.preview : '（目标机器上没有这一项）'),
+                  ]),
+                  h('div', { key: 'inc', style: { flex: 1, minWidth: 0 } }, [
+                    h('div', { key: 't', style: muted }, '包内'),
+                    h('pre', { key: 'p', style: { fontSize: 11, whiteSpace: 'pre-wrap', wordBreak: 'break-all', margin: 0, maxHeight: 160, overflow: 'auto', background: 'var(--dsh-surface, #f7f7f7)', padding: 6, borderRadius: 4 } },
+                      item.incoming.preview),
+                  ]),
+                ])
+              : null,
+          ]);
         });
+
+        var changedCount = preview.changedCount !== undefined
+          ? preview.changedCount
+          : (preview.items || []).filter(function (item) { return item.changed === true; }).length;
+
         children.push(h('div', { key: 'pv', style: box }, [
           h('div', { key: 'v', style: { fontSize: 13, marginBottom: 6 } }, preview.version ? preview.version.message : ''),
           preview.integrity !== undefined && preview.integrity !== null
             ? h('div', {
               key: 'ig',
               style: preview.integrity.ok === true ? Object.assign({}, muted, { color: 'var(--dsh-success, #2d7d46)' }) : danger,
-            }, (preview.integrity.ok === true ? '✅ ' : '⚠ ') + (preview.integrity.message || '')
-              + (preview.integrity.mismatched !== undefined && preview.integrity.mismatched.length > 0
-                ? '（不一致：' + preview.integrity.mismatched.map(function (m) { return m.path; }).join(', ') + '）'
-                : '')
-              + (preview.integrity.missing !== undefined && preview.integrity.missing.length > 0
-                ? '（缺失：' + preview.integrity.missing.join(', ') + '）'
-                : ''))
+            }, (preview.integrity.ok === true ? '✅ ' : '⚠ ') + (preview.integrity.message || ''))
             : null,
-          h('ul', { key: 'l', style: { margin: '4px 0 4px 18px', padding: 0 } }, changeNodes),
+          h('div', { key: 'cnt', style: { fontSize: 13, margin: '6px 0' } },
+            '共 ' + (preview.items || []).length + ' 项，其中 ' + changedCount + ' 项与目标不同'),
+          h('div', { key: 'bulk', style: { marginBottom: 4 } }, [
+            h('button', {
+              key: 'all',
+              onClick: function () {
+                var next = {};
+                var list = preview.items || [];
+                for (var i = 0; i < list.length; i += 1) if (list[i].changed === true) next[list[i].id] = true;
+                setImpicked(next);
+              },
+              style: Object.assign({}, button, { fontSize: 12 }),
+            }, '全选变更'),
+            h('button', {
+              key: 'none',
+              onClick: function () { setImpicked({}); },
+              style: Object.assign({}, button, { fontSize: 12, marginLeft: 8 }),
+            }, '全不选'),
+          ]),
+          h('div', { key: 'rows' }, pvRows),
           (preview.warnings || []).length > 0 ? h('div', { key: 'w', style: danger }, preview.warnings.join('；')) : null,
           h('div', { key: 'src', style: muted }, '来源文件：' + (preview.path || '')),
-          h('label', { key: 'ok', style: { display: 'block', margin: '8px 0', cursor: 'pointer' } }, [
-            h('input', {
-              key: 'cb',
-              type: 'checkbox',
-              checked: confirmed === true,
-              onChange: function () { setConfirmed(confirmed !== true); },
-              style: { marginRight: 8, verticalAlign: 'middle' },
-            }),
-            h('span', { key: 'lb', style: { fontSize: 12 } }, '我确认写入（会先自动备份现有配置）'),
-          ]),
           h('button', {
             key: 'go',
             onClick: doImport,
-            disabled: busy !== '' || confirmed !== true || (preview.version && preview.version.blocked === true),
-            style: button,
-          }, busy === 'import' ? '导入中…' : '执行导入'),
+            disabled: busy !== '' || importPickedIds().length === 0 || (preview.version && preview.version.blocked === true) || (preview.integrity !== undefined && preview.integrity !== null && preview.integrity.blocked === true),
+            style: Object.assign({}, button, { marginTop: 8 }),
+          }, busy === 'import' ? '导入中…' : '应用选中项（' + importPickedIds().length + ' 项）'),
           h('div', { key: 'ttl', style: muted },
-            '确认码 ' + (preview.tokenTtlSeconds || 300) + ' 秒内有效，只能用一次；过期请重新预览。'),
+            '确认码 ' + (preview.tokenTtlSeconds || 300) + ' 秒内有效，只能用一次；过期或换包请重新预览。导入前会自动备份现有配置。'),
         ]));
       }
 
       if (imported !== null && imported.ok === true) {
+        var appliedNodes = (imported.applied || []).map(function (entry, index) {
+          return h('li', { key: 'a' + index, style: { fontSize: 12 } },
+            (entry.id || '') + ' — ' + (entry.action || '') + (entry.target ? ' → ' + entry.target : ''));
+        });
+        var failedNodes = (imported.failed || []).map(function (entry, index) {
+          return h('li', { key: 'f' + index, style: Object.assign({}, danger, { fontSize: 12 }) },
+            (entry.id || '') + ' 失败：' + (entry.error || ''));
+        });
         var stepNodes = (imported.nextSteps || []).map(function (line, index) {
           return h('li', { key: 's' + index, style: { fontSize: 12 } }, line);
         });
         children.push(h('div', { key: 'done', style: box }, [
           h('div', { key: 't', style: { fontSize: 13, fontWeight: 600 } }, '导入完成'),
-          h('ul', { key: 'l', style: { margin: '4px 0 4px 18px', padding: 0 } }, stepNodes),
+          h('div', { key: 'sub', style: muted }, '已应用 ' + (imported.applied || []).length + ' 条，失败 ' + (imported.failed || []).length + ' 条'),
+          h('ul', { key: 'al', style: { margin: '4px 0 4px 18px', padding: 0 } }, appliedNodes),
+          failedNodes.length > 0 ? h('ul', { key: 'fl', style: { margin: '4px 0 4px 18px', padding: 0 } }, failedNodes) : null,
+          h('div', { key: 'next', style: Object.assign({}, muted, { marginTop: 6 }) }, '接下来：'),
+          h('ul', { key: 'nl', style: { margin: '2px 0 4px 18px', padding: 0 } }, stepNodes),
         ]));
       }
 
-      // —— 清理区：只删本插件产出的包，先 dry-run 再确认 ——
+      // ── ③ 清理 ─────────────────────────────────────────────────────────
       children.push(h('div', { key: 'cln', style: Object.assign({}, box, { marginTop: 12 }) }, [
         h('div', { key: 't', style: { fontWeight: 600, marginBottom: 8 } }, '③ 清理旧备份'),
         h('div', { key: 'h', style: muted },
@@ -569,6 +711,7 @@ window.__ModuleLoader__.load({
 
       return h('div', { style: { padding: 4 } }, children);
     }
+
 
     /** 渲染兜底：任何异常都只显示一句提示，不让 React 树崩。 */
     function SafeSection(props) {

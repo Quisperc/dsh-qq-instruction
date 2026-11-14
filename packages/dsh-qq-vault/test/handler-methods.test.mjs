@@ -100,7 +100,10 @@ test('客户端确实用到了 list-bundles / cleanup / upload', () => {
   assert.match(client, /doUpload/, '客户端应有上传流程');
 });
 
-test('人格备份面：客户端提示的是「生效值」而不是仓库文件', () => {
+test('客户端是逐项交互：/items 拉清单、/preview-import 逐项对比、import 带 items', () => {
   const client = read(path.join('client', 'vault.js'));
-  assert.match(client, /persona\.text/, '要说明 persona.text 才是生效人格');
+  assert.match(client, /'\/items'/, '应从 /items 拉配置项清单（不再写死四项）');
+  assert.match(client, /incoming/, '预览要用逐项的 incoming 侧数据');
+  assert.match(client, /全选变更/, '应能一键全选变更项');
+  assert.match(client, /items: ids\.join/, '导入时必须把选中的 item 集合传给 host');
 });
