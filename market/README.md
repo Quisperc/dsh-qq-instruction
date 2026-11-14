@@ -60,13 +60,44 @@ node scripts/make-market-index.mjs --repo … --commit <sha> --timestamp 1763000
 | `title` / `description` | **`locale/{en,zh}.json` 的 `meta.*`** | 与 DSH 设置页显示名同源；缺失时回退 `package.json` 的 `meta` / `description` |
 | `icon` | `package.json.icon` 指向的包根文件 | 生成器把它写成**相对索引文件**的路径（例如 `../packages/dsh-qq-whale/icon.svg`） |
 | `author` / `homepage` / `repository` | `author` 取 `package.json`；后两者**由 `--repo` 推导** | 不混用 `package.json` 里的旧地址，否则详情页会出现两个不同仓库 |
-| `metadata.category` / `description` | `package.json.dsh.catalog` | ⚠️ **`dsh.catalog` 是本仓库自有的扩展字段**，官方包没有它（官方用生成好的 catalog 文件 + `meta`）。校验器会忽略未知字段，所以留着无害；缺失时该插件就没有分类，`summary` 回退到 `locale` 的 description |
+| `metadata.category` | 包内 `package.json` 的 `dsh.catalog.category`（whale 第 43 行 `"qq"`；vault 第 49 行 `"qq"`） | 必须在 `scripts/make-market-index.mjs` 的 `CATEGORY_DECLARATIONS` 里声明过，否则生成器直接报错 |
+| `metadata.summary`（索引 description） | 包内 `dsh.catalog.summary{en,zh}`（whale 44–47 行；vault 50–53 行） | 详情页顶部那句简介；与 `locale/*.json` 的 `meta.description` **是两套文案**，前者给市场、后者给设置页 |
+| `metadata.capabilities` | 包内 `dsh.catalog.capabilities`（whale 48 行起；vault 54 行起） | 仅作展示/检索标签，不参与安装决策 |
+| 插件详情长文 | **包 README.md**（见 §1.6） | 不是索引字段：市场自己去包里读 |
+
+> ⚠️ **`dsh.catalog` 是本仓库自有的扩展字段**，官方包没有它（官方用生成好的 catalog 文件 + `meta`）。
+> 校验器会忽略未知字段，所以留着无害；缺失时该插件就没有分类，`summary` 回退到 `locale` 的 description。
 | `versions[].source` | `--repo` + `git rev-parse HEAD` + `packages/<dir>` | 每个版本钉死到 commit |
 | `versions[].engines.dsh` | `dsh.compatibility.dsh`（回退 `engines.dsh`） | 必须是 SemVer range |
 
 > 想让某个插件在市场里**有分类**，就在 `scripts/make-market-index.mjs` 的 `CATEGORY_DECLARATIONS` 里声明这个 id，
 > 再在包的 `dsh.catalog.category` 里引用它 —— 校验器会拒绝「引用未声明的 id」。
 
+
+## 1.6 详情页怎么来的（改哪里能让详情页更好看）
+
+市场详情页的长文**不来自索引**，而是 DSH 去包里读 Markdown。解析顺序（源码：`dsh-plugin-manager/lib/index.js:2099-2111`）：
+
+| 顺序 | 读什么 | 说明 |
+|---|---|---|
+| 1 | 包 `locale/<语言>.json` 里 `meta.detail` 指向的 Markdown 文件 | 想用单独的长文时用它；按语言回退到英文 |
+| 2 | 包里没有 `meta.detail` → **读包根 `README.md`** | **本仓库两个包都用这条** |
+
+所以：
+
+- **改进详情页 = 改包 README**（不需要重新生成索引，也不需要发版——但改了要 commit + push，市场读的是仓库里的版本）；
+- 详情页里的**图片**由市场自己的接口代理转发（`plugin-manager` 的 detail-file 路由），相对路径以文档所在目录为基准；
+- 当前两个包的 `locale/*.json` **没有** `meta.detail`，即详情页 = README。如果要给市场单独写一份「商品页」而与开发文档分开，才需要往 locale 的 `meta` 里加 `"detail": "DETAIL.md"`。
+
+**详情页质量自查**（改 README 时对着看）：
+
+- [ ] 开头 1–2 句说清「这是什么、解决什么问题」，**不要从「安装」开始**
+- [ ] 有**一次真实用法**（用户视角的动作序列，不是 API 列表）
+- [ ] 有**界面示意**（没有截图就用 ASCII 画设置页长什么样）
+- [ ] 有「已知限制」小节（限制比优点更能建立信任）
+- [ ] 三条安装路径都能直接复制执行
+
+---
 
 ## 2. 怎么托管
 
@@ -171,3 +202,40 @@ npm test
 | 装了却没更新 | 索引是快照，且 commit 钉死；改了代码没重新生成索引 |
 | 校验报 `must be a lowercase 40-hex-digit commit SHA` | 用了短 hash 或大写 |
 | 校验报 `references undeclared id` | 插件 `dsh.catalog.category` 没在 `scripts/make-market-index.mjs` 的 `CATEGORY_DECLARATIONS` 里声明 |
+---
+
+## 7. 新增一个插件要做什么（上架视角）
+
+> 与 [`../docs/05-handover/FEATURE-CHECKLIST.md`](../docs/05-handover/FEATURE-CHECKLIST.md) 呼应：那边从「写代码」出发，这里从「让它出现在市场里」出发。
+
+### 7.1 包本身（缺一项市场就会显示得残缺）
+
+- [ ] `package.json`：`name` / `version` / `description` / `license`（MIT）/ `author` / `repository`（含 `directory`）/ `homepage` / `bugs` / `engines.node`
+- [ ] `dsh.bundle.patch` 指向包内 `cordis.patch.yml`（否则装上也进不了组合树）
+- [ ] `files` 至少含 `lib`、`cordis.patch.yml`、`README.md`、`CHANGELOG.md`、`LICENSE`、`icon.svg`、`locale`
+- [ ] `icon.svg`（矢量，≤256 KiB）+ `locale/{en,zh}.json` 的 `meta.title` / `meta.description`
+- [ ] `dsh.catalog`：`category`（必须在生成器的 `CATEGORY_DECLARATIONS` 里声明过）+ `summary{en,zh}` + `capabilities[]`
+- [ ] `README.md` 按 §1.6 的自查表写（它是详情页）
+
+### 7.2 进索引
+
+- [ ] 把包放到 `packages/<包名>/` 下即可——生成器**自动扫描** `packages/`（`make-market-index.mjs:150-152`），没有手工清单要改
+- [ ] 若用了新分类：先在 `CATEGORY_DECLARATIONS` 里声明（`{ title: { en, zh } }`），再在包 `dsh.catalog.category` 引用
+- [ ] `node scripts/make-market-index.mjs --repo https://github.com/Quisperc/dsh-qq-instruction` 先看 dry-run 输出（会自校验 + 打印每条的 install spec）
+- [ ] 加 `--write` 落盘，**然后提交索引**（顺序见 §4）
+
+### 7.3 验收（装一次才算完成）
+
+- [ ] 在**另一台干净机器**（或临时 profile）从市场装一次：`设置 → 插件 → 发现` 能搜到、能装、装完 `fiberPhase: active`
+- [ ] 装完的设置页卡片能打开（有 client 半的插件）
+- [ ] 卸载一次，确认没有残留副作用（例如 `agentPresetCustom` 指向已消失的 preset）
+- [ ] 详情页在浏览器里打开看一遍：图标不裂、安装命令可复制、限制写清楚
+
+### 7.4 常见「上架了但不好用」的原因
+
+| 现象 | 原因 |
+|---|---|
+| 市场里能搜到，装完设置页没有卡片 | 只写了 host 半，缺 client 半（注入 `plugins.bundle.config`） |
+| 详情页内容很单薄 | README 只有安装步骤，没有「这是什么 / 用法 / 限制」 |
+| 版本显示对了但装的还是旧代码 | 索引钉的 commit 早于代码提交（顺序反了） |
+| 分类为空 / 被分到奇怪的位置 | `dsh.catalog.category` 缺失或未声明 |

@@ -60,8 +60,9 @@ qqbot/
 │   ├── 01-tutorial/       教程：手把手带你做完一件事
 │   ├── 02-how-to/         指南：解决一个具体问题
 │   ├── 03-reference/      参考：查字段、查参数、查结论
-│   └── 04-explanation/    解释：为什么这么设计
-│       └── decisions/     ADR 架构决策记录
+│   ├── 04-explanation/    解释：为什么这么设计
+│   │   └── decisions/     ADR 架构决策记录
+│   └── 05-handover/       接手：架构 / 运维 / 规范 / **加功能清单**
 ├── config/                配置模板（可直接用）
 ├── packages/              自研插件源码（每个子目录一个 npm 包，见 §1.1）
 ├── persona/               人格卡
@@ -166,6 +167,9 @@ qqbot/
 ---
 
 ## 3. 新增功能流程
+
+> **本节只回答「走哪条路线」**（A 配置 / B 新工具插件 / C 人格卡 / D 上游 PR / E 本地私有）。
+> 路线定了之后要**动哪些文件、按什么顺序做**，看 [`./docs/05-handover/FEATURE-CHECKLIST.md`](./docs/05-handover/FEATURE-CHECKLIST.md)。
 
 ### 3.1 决策树（第一步永远是这个）
 

@@ -4,6 +4,20 @@
 > 每次改动都要记一笔——**半年后你会想知道当时为什么这么改**。
 > 版本号是**双轨**的（项目本体 + 插件包），规则见 CONTRIBUTING §6。
 
+## [1.28.0] - 2026-11-15（新增功能规范 + 发现页完善）
+
+### Added
+- `docs/05-handover/FEATURE-CHECKLIST.md`：9 章 29 条可勾选清单，覆盖「加一个功能要动哪些地方」
+  （ADR 判据 / 放哪个包 / 五类必测坑 / 文档六处同步 / 双轨版本与发版三步 / 配置与权限 / 收尾）
+- `market/README.md` §1.6：市场详情页的解析顺序（`locale.meta.detail` → 回退包 README），
+  结论「改详情页 = 改包 README，不用重新生成索引」
+- `market/README.md` §7：新增插件要做什么（元信息 → 进索引 → 验收 → 上架不好用的四种原因）
+
+### Changed
+- 两个包 README 各补「一次真实用法」与「设置页长什么样」（ASCII 示意），面向发现页读者
+- `market/README.md` 字段来源表拆细到 category / summary / capabilities / 详情长文，带包内行号
+- `docs/README.md` 与 `05-handover/README.md` 登记新文件；`CONTRIBUTING` §3 指向新清单
+
 ## [1.27.0] - 2026-11-14（生图打通）
 
 ### Added

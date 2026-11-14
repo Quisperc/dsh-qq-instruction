@@ -64,6 +64,7 @@
 | [`design-rationale.md`](./04-explanation/design-rationale.md) | 分层取舍、决策契约、治理参数、第一周清单 | 📖 参考 |
 | [`memory-model.md`](./04-explanation/memory-model.md) | 旧的 `dsh-soul-md` 四层记忆模型 | 🕰️ **已过期**：ADR-005 否决了 soul-md，现用 `meow-memory`（工作区级 `QQ_msg/.dsh-meow/`）。仅作历史参考 |
 | [`decisions/`](./04-explanation/decisions/) | ADR 架构决策记录（只增不改） | 📚 历史档案，索引见 [`decisions/README.md`](./04-explanation/decisions/README.md) |
+| [`05-handover/FEATURE-CHECKLIST.md`](./05-handover/FEATURE-CHECKLIST.md) | **要加新功能 / 发新版本 / 上架插件时** | ✅ 现行：可勾选的执行清单——动手前查重、ADR 判据、放哪个包、测试要覆盖哪五类坑、文档六处同步、双轨版本与发版三步顺序、配置与权限、收尾命令 |
 
 ---
 
