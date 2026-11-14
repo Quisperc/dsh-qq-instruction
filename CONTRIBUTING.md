@@ -27,7 +27,7 @@
 
 ### 0.2 三条不变量
 
-1. **Git 是真源。** 改动先落 `cnb.cool/civer/dsh-qq-instruction`，本地是工作区、网盘是只读副本
+1. **Git 是真源。** 改动先落 `github.com/Quisperc/dsh-qq-instruction`（公开），本地是工作区、网盘是只读副本
    （见 [`docs/02-how-to/sync-assets.md`](docs/02-how-to/sync-assets.md)）。
 2. **本文是唯一规范来源。** 发现别的文档与本文冲突时，**以本文为准，并顺手把那边改过来**——
    不要两边各写一套，否则下一个接手的模型会随机选中一边。
@@ -218,7 +218,8 @@ dsh web                                                      # 4. 重启进程�
 - [ ] 重启验证，并写清「怎么知道生效了」
 - [ ] 记了 `CHANGELOG.md`（含改了什么、为什么、怎么回滚）
 
-> ⚠️ `config/cordis.patch.yml` 含真实 token。转公开 / 外发前的处置见
+> ⚠️ 真实配置 `config/cordis.patch.yml` 含 token，**已被 `.gitignore` 排除、不在仓库里**（只有模板
+> `config/cordis.patch.example.yml`）。提交前确认 `git status` 里没有它；泄露处置见
 > [`docs/02-how-to/sync-assets.md`](docs/02-how-to/sync-assets.md) §4，并把待办记进 `TODO.md`。
 
 ### 3.3 路线 B（新增工具插件）检查清单
@@ -337,7 +338,13 @@ ADR **只增不改**。要推翻旧的，写一个新的标记「取代 ADR-NNN�
 
 ### Git 工作流
 
-**真源**：`cnb.cool/civer/dsh-qq-instruction`（私有），`main` 为默认分支。
+**真源**：`github.com/Quisperc/dsh-qq-instruction`（公开，`main` 为默认分支）。
+
+克隆（已公开，不需要令牌）：
+
+```bash
+git clone https://github.com/Quisperc/dsh-qq-instruction
+```
 
 | 场景 | 做法 |
 |---|---|

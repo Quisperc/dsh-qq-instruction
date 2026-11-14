@@ -2,18 +2,18 @@
 
 > 在网页版 / 云服务器版 DSH 上，把 NapCat（OneBot 11 / WSS）接入为一个**有人格、能听会说、会看图会画图**的 QQ 群成员。
 
-**仓库**：`cnb.cool/civer/dsh-qq-instruction`（私有） · **真源**：Git，所有改动先落这里
+**仓库**：[`github.com/Quisperc/dsh-qq-instruction`](https://github.com/Quisperc/dsh-qq-instruction)（公开） · **插件市场索引**：[`quisperc.github.io/dsh-qq-instruction/market/index.json`](https://quisperc.github.io/dsh-qq-instruction/market/index.json) · **真源**：Git，所有改动先落这里
 
 > ⚠️ **别装错**：生态里有两个"大肥鱼"——本项目的 `dsh-qq-whale` 是**QQ 群聊的受限 Agent 预设**（`preset-qq`），
 > `dsh-bigfish` 是**桌面宠物**。详见 [`docs/03-reference/plugin-inventory.md`](docs/03-reference/plugin-inventory.md)。
 **当前状态**：环境与 API 已实测验证，配置已按真实环境填好，可直接安装。
 
-> ⚠️ **本仓库 `config/cordis.patch.yml` 含真实 NapCat Token 与 QQ 号。**
-> 仓库当前为**私有**，可放心存放；要转公开、发 Issue、给别人看之前，先跑
-> `python3 scripts/scrub-secrets.py` 生成脱敏版，并确认真实配置已移除。
-> Git 历史会永久保留——**公开前必须清理，事后删除文件是无效的。**
+> ⚠️ **本仓库不含任何真实凭据。** 真实配置（含 NapCat Token / QQ 号）在 `profiles/web/cordis.patch.yml`，
+> 已被 `.gitignore` 排除、从未提交；仓库里只有模板 `config/cordis.patch.example.yml`。
+> 提交前仍建议自查一遍：`git status` 不该出现 `config/cordis.patch.yml`。
+> 历史里曾有明文 token，已通过重写历史清除，并**按已泄露处理、需要轮换**。
 
-> **版本基线（2026-11-14）**：DSH `0.2.2-rc.3` · `@sputnikzaychik/dsh-qq-bot` `0.12.8` · `dsh-qq-whale` `0.14.0` · `dsh-qq-vault` `0.4.0`
+> **版本基线（2026-11-14）**：DSH `0.2.2-rc.3` · `@sputnikzaychik/dsh-qq-bot` `0.14.0` · `dsh-qq-whale` `0.14.0` · `dsh-qq-vault` `0.5.0`
 
 | 项 | 值 | 状态 |
 |---|---|---|
@@ -25,9 +25,9 @@
 | 会话 preset | `preset-qq`（受限） | ✅ 生效（**注意：老会话 preset 锁死，换只能重建**） |
 | 工具面收窄 | `dsh-qq-whale`：guard（执行期）+ 首个 pre-step 的 `restrict`（隐藏） | ✅ 23 项白名单，见 [tool-surface](./docs/03-reference/tool-surface.md) |
 | 联网 | `qq_websearch` / `qq_webfetch` | ✅ 可用（通用 `web_*` 已从白名单移除，避免与 qq-bot 自带能力重复） |
-| **识图** | 走 agent 自己 `read_image` 看落盘图 | ✅ 可用（qq-bot 自带「描述注入」空返回，别依赖） |
+| **识图** | qq-bot **原生附件**（`vision.provider`/`vision.model` 都留空） | ✅ 图片作为附件随消息进会话，模型直接看；不再需要 `read_image` 绕路 |
 | **生图** | `qq_draw` | ❌ 关着，且缺 key + 端点不兼容 |
-| **TTS / STT** | — | ❌ qq-bot v0.12.8 无实现，需从零写 |
+| **TTS / STT** | — | ❌ qq-bot v0.14.0 仍无实现，需从零写 |
 | 主动发言 | `proactive.enabled=true` | ⚠️ `dryRun=true`，只演练不外发 |
 | 群管理 | `admin.enabled=false` | ❌ 全部拒绝 |
 | 记忆 | `meow-memory`（工作区级） | ✅ 群聊私聊共用 `QQ_msg/.dsh-meow/memory.db` |
@@ -64,17 +64,17 @@
 设置 → 插件 → **发现** → 索引菜单 →「管理索引来源」→ 添加：
 
 ```
-https://cnb.cool/civer/dsh-qq-instruction/raw/main/market/index.json
+https://quisperc.github.io/dsh-qq-instruction/market/index.json
 ```
 
-然后在市场里搜索 `dsh-qq-whale` / `dsh-qq-vault` 安装并启用。
-索引是本仓库自己托管的静态 JSON（生成与托管方式见 [`market/README.md`](./market/README.md)）。
+然后在市场里搜索 `dsh-qq` 安装并启用（`dsh-qq-whale` / `dsh-qq-vault`）。
+索引是本仓库自己托管的静态 JSON（GitHub Pages，源文件 `market/index.json`；生成与发布方式见 [`market/README.md`](./market/README.md)）。
 
 ### 路径 B：GitHub 直装（不经过市场）
 
 ```bash
-dsh plugin --profile web add 'git+https://cnb.cool/civer/dsh-qq-instruction.git#<40位commit>&path:/packages/dsh-qq-whale'
-dsh plugin --profile web add 'git+https://cnb.cool/civer/dsh-qq-instruction.git#<40位commit>&path:/packages/dsh-qq-vault'
+dsh plugin --profile web add 'git+https://github.com/Quisperc/dsh-qq-instruction.git#<40位commit>&path:/packages/dsh-qq-whale'
+dsh plugin --profile web add 'git+https://github.com/Quisperc/dsh-qq-instruction.git#<40位commit>&path:/packages/dsh-qq-vault'
 ```
 
 `#<commit>` 必须是完整 40 位小写 hex；`&path:/…` 是单仓库多子包的写法，不能省。
@@ -121,7 +121,7 @@ qqbot/
 ├── market/              ★ 插件市场索引（index.json + 托管/发布手册）
 ├── packages/            自研插件源码
 │                        ├── dsh-qq-whale  preset-qq + 工具收窄 + 设置页两项
-│                        └── dsh-qq-vault  设置页导出/导入（GET-only + 上传）
+│                        └── dsh-qq-vault  设置页逐项备份/导入（多选 + 一次性确认码 + 上传）
 ├── persona/             人格卡
 ├── tools/               验证脚本
 ├── scripts/             运维脚本（install-whale / verify-live / make-market-index / set-repo + 历史 python 检查脚本）

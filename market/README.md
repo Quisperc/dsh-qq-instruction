@@ -2,12 +2,21 @@
 
 这个目录只放**一个东西**：`index.json` —— DSH「插件市场」读的索引文件（format 1）。
 
-用户把它的 URL 加进 DSH 之后，才能在「设置 → 插件 → 发现」里搜到本仓库的两个插件：
+**当前状态（2026-11-14 已上线）**：
+
+| 项 | 值 |
+|---|---|
+| 仓库 | `https://github.com/Quisperc/dsh-qq-instruction`（公开） |
+| 索引 URL | `https://quisperc.github.io/dsh-qq-instruction/market/index.json` |
+| 托管方式 | GitHub Pages（从 `main` 分支的 `/market` 目录发布） |
+| 已收录 | `dsh-qq-whale 0.14.0` · `dsh-qq-vault 0.5.0` |
+
+用户把索引 URL 加进 DSH 之后，才能在「设置 → 插件 → 发现」里搜到本仓库的两个插件：
 
 | 插件 | 一句话 |
 |---|---|
 | `dsh-qq-whale` | 给 QQ 会话提供受限 Agent preset（`id: qq`）+ 工具面收窄 |
-| `dsh-qq-vault` | 设置页「QQBot 备份」：导出/导入配置、人设、记忆 |
+| `dsh-qq-vault` | 设置页「QQBot 备份」：**逐配置项**多选导出/导入（配置、人设、记忆） |
 
 ---
 
@@ -17,10 +26,10 @@
 
 ```bash
 # 预览（dry-run，只打印 + 校验，不落盘）
-node scripts/make-market-index.mjs --repo https://github.com/OWNER/REPO
+node scripts/make-market-index.mjs --repo https://github.com/Quisperc/dsh-qq-instruction
 
 # 真写到 market/index.json
-node scripts/make-market-index.mjs --repo https://github.com/OWNER/REPO --write
+node scripts/make-market-index.mjs --repo https://github.com/Quisperc/dsh-qq-instruction --write
 ```
 
 脚本做的事：
@@ -63,13 +72,13 @@ node scripts/make-market-index.mjs --repo … --commit <sha> --timestamp 1763000
 
 索引就是一个静态 JSON，**任何能返回 `application/json` 的地方都行**。三条常见路径：
 
-### 2.1 GitHub Pages（推荐）
+### 2.1 GitHub Pages（**本项目正在用**）
 
 仓库 Settings → Pages → Source 选 `Deploy from a branch` → 分支 `main`、目录 `/ (root)`。
-之后索引 URL 是：
+当前索引 URL 就是按这个方式来的：
 
 ```
-https://<owner>.github.io/<repo>/market/index.json
+https://quisperc.github.io/dsh-qq-instruction/market/index.json
 ```
 
 图标的相对路径（`../packages/dsh-qq-whale/icon.svg`）会解析成同源的
@@ -114,13 +123,19 @@ git+<url>.git#<40位commit>&path:/packages/dsh-qq-whale
 
 1. 改代码，跑测试：`npm test`（根目录，两个包一起）+ `node scripts/verify-live.mjs`（真机 15 项）
 2. 两个包的 `package.json` **升 version**，并在各自 `CHANGELOG.md` 记一条
-3. commit（记住这个 commit）
-4. `node scripts/make-market-index.mjs --repo <真实地址> --write`
+3. commit 并推送（**记住这个 commit**——它必须包含新版本的包）
+4. `node scripts/make-market-index.mjs --repo https://github.com/Quisperc/dsh-qq-instruction --write`
    —— 校验通过后 `market/index.json` 里就出现了新版本
    （想固定可复现：加 `--commit $(git rev-parse HEAD) --timestamp $(git log -1 --format=%ct)`）
-5. commit 索引文件 → 推送 → 用户市场里点「更新」
+5. commit 索引文件 → 推送（Pages 自动重新发布，约 1 分钟）→ 用户市场里点「更新」
 
-> 同一个版本号**不能出现两次**（校验器会拒）；升了 version 但忘了重新生成索引，用户就看不到更新。
+> **顺序很重要：先提交包，再生成索引。** 索引里钉的是生成那一刻的 `HEAD`，
+> 如果先提交索引再提交包，索引指向的 commit 里就还没有新版本代码，用户装下来是旧的。
+>
+> **同一个版本号不能出现两次**（校验器会拒）；升了 version 但忘了重新生成索引，用户就看不到更新。
+>
+> **索引保留历史版本**：生成器会读旧索引、把往期版本原样保留（同名版本以本次为准）。
+> 所以发 0.15.0 之后，0.14.0 仍然可装——用户需要回滚时直接选旧版本。
 
 ---
 
@@ -128,7 +143,7 @@ git+<url>.git#<40位commit>&path:/packages/dsh-qq-whale
 
 官方目录（DSH 自带的市场源）不认自托管索引，需要单独提交。准备材料：
 
-- [ ] 公开仓库（当前是私有托管在 CNB；官方目录要求可匿名 clone）
+- [x] 公开仓库（已迁到 GitHub 公开：`github.com/Quisperc/dsh-qq-instruction`，可匿名 clone）
 - [ ] 每个包：`license`（MIT）+ `LICENSE` 文件、`author`、`repository`（含 `directory`）、`homepage`、`bugs`
 - [ ] 每个包根有 `icon.svg`（≤256 KiB，SVG/PNG/JPEG/WebP）或 `<包名>/icon` 导出
 - [ ] `engines.dsh` 是**合法 SemVer range**（现在是 `>=0.2.0-rc.2 <0.3.0`），不能写 `workspace:`

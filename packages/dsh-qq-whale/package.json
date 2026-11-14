@@ -40,7 +40,7 @@
       "dsh": ">=0.2.0-rc.2 <0.3.0"
     },
     "catalog": {
-      "category": "preset",
+      "category": "qq",
       "summary": {
         "en": "Adds a restricted Agent preset (id: qq) for QQ chats and enforces its tool surface.",
         "zh": "为 QQ 群聊提供受限 Agent preset（id: qq），并在设置页热调工具面收窄。"
