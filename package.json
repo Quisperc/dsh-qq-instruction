@@ -5,11 +5,12 @@
   "type": "module",
   "description": "QQBot 的文档与自有插件仓库。本文件只是聚合入口：不安装任何依赖，依赖一律由宿主 DSH profile 提供（见 docs/05-handover/OPERATIONS.md）。",
   "scripts": {
-    "test": "npm run test:whale && npm run test:vault",
+    "test": "npm run test:whale && npm run test:vault && npm run test:voice",
     "test:whale": "npm --prefix packages/dsh-qq-whale test",
     "test:vault": "npm --prefix packages/dsh-qq-vault test",
     "verify:live": "node scripts/verify-live.mjs",
-    "push:all": "bash scripts/push-all.sh"
+    "push:all": "bash scripts/push-all.sh",
+    "test:voice": "npm --prefix packages/dsh-qq-voice test"
   },
   "engines": {
     "node": ">=22.6"

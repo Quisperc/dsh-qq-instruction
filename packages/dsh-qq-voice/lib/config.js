@@ -29,6 +29,16 @@ export const DEFAULT_MODE = 'manual';
 export const SEED_MODES = ['model', 'fixed', 'random'];
 export const DEFAULT_SEED_MODE = 'model';
 
+/**
+ * 语气三参数（官方 Qwen-Audio-TTS 文档）：rate=语速、pitch=音调、volume=音量。
+ *
+ * 为什么要在插件里再夹一次：服务端对越界值直接 400，而模型很容易给出 3.0 / -1 / 200
+ * 这类值。夹到边界并**在返回里如实说明**，比让它整次调用失败有用得多。
+ */
+export const RATE_RANGE = Object.freeze({ min: 0.5, max: 2.0 });
+export const PITCH_RANGE = Object.freeze({ min: 0.5, max: 2.0 });
+export const VOLUME_RANGE = Object.freeze({ min: 0, max: 100 });
+
 /** seed 的合法上界（不含）：2^31。越界一律回落，别把非法值透给服务端。 */
 export const SEED_LIMIT = 2 ** 31;
 
@@ -44,6 +54,10 @@ export const DEFAULT_CONFIG = Object.freeze({
   voices: [], // 可选音色目录：模型只能从这里面挑（空 = 不校验，允许透传）
   seedMode: DEFAULT_SEED_MODE,
   defaultSeed: 2024,
+  // 语气三参数：null 表示「不传该字段」（服务端用它的默认），数字才是显式值。
+  defaultRate: 1.0,
+  defaultPitch: 1.0,
+  defaultVolume: 50,
   apiKey: '',
   apiKeyEnv: 'DASHSCOPE_API_KEY',
   format: 'wav',
@@ -97,6 +111,12 @@ export const Config = Schema.object({
     .description('seed 策略：model=模型传了就用、没传随机 / fixed=永远用 defaultSeed / random=每次随机（忽略模型传值）'),
   defaultSeed: Schema.number().default(DEFAULT_CONFIG.defaultSeed).volatile()
     .description('fixed 模式下使用的种子；也是模型没传时的兜底参考值（0 ≤ seed < 2^31）'),
+  defaultRate: Schema.number().default(DEFAULT_CONFIG.defaultRate).volatile()
+    .description('默认语速（0.5~2.0，1.0 正常；<1 更慢）。模型可用工具参数覆盖；填 0 或留空表示不传该字段'),
+  defaultPitch: Schema.number().default(DEFAULT_CONFIG.defaultPitch).volatile()
+    .description('默认音调（0.5~2.0，1.0 正常；<1 更低）。模型可用工具参数覆盖；填 0 表示不传该字段'),
+  defaultVolume: Schema.number().default(DEFAULT_CONFIG.defaultVolume).volatile()
+    .description('默认音量（0~100，默认 50）。模型可用工具参数覆盖；填 -1 表示不传该字段'),
   apiKey: secretString('DashScope API key（只写字段；留空 = 读环境变量）'),
   apiKeyEnv: Schema.string().default(DEFAULT_CONFIG.apiKeyEnv).volatile()
     .description('API key 的环境变量名（apiKey 留空时才读它）'),
@@ -226,6 +246,86 @@ export function normalizeVoices(value) {
 const catalogEmpty = (cfg) => !Array.isArray(cfg.voices) || cfg.voices.length === 0;
 
 /**
+ * 三参数（rate/pitch/volume）的「是否要传」判定。
+ *
+ * 语义：null 表示**不传**（让服务端用它的默认）；数字表示显式值。
+ * 配置里填 0/-1 这类哨兵值视作「不传」，因为 0 对 rate/pitch 是非法的（下限 0.5），
+ * 而 volume=0 会被理解成静音——都不是用户想要的结果。
+ *
+ * @param {unknown} value
+ * @returns {number|null}
+ */
+export function normalizeOptionalTone(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const n = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(n)) return null;
+  return n;
+}
+
+/**
+ * 「键缺失 → 用出厂默认；键存在（含 null）→ 按它」。
+ *
+ * 为什么不能用 ??：`null ?? 1.0` 会得到 1.0，等于把「我不想传这个字段」当成
+ * 「用默认值」，语义就丢了。
+ *
+ * @param {unknown} raw 配置里的原始值
+ * @param {number} fallback 出厂默认
+ * @returns {number|null}
+ */
+function toneOr(raw, fallback, range) {
+  const pick = (value) => {
+    const n = normalizeOptionalTone(value);
+    if (n === null) return null;
+    // 哨兵：rate/pitch 的合法区间从 0.5 起，写 0 只可能是「我不想传」；
+    // volume 的 0 是合法音量（静音），所以只把负数当哨兵。
+    if (range.min > 0 ? n <= 0 : n < 0) return null;
+    return n;
+  };
+  return raw === undefined ? pick(fallback) : pick(raw);
+}
+
+/**
+ * 把一个语气参数夹到合法区间，并记录「被夹过」。
+ *
+ * @param {number} value
+ * @param {{min: number, max: number}} range
+ * @returns {{value: number, clamped: boolean}}
+ */
+function clampTone(value, range) {
+  if (value < range.min) return { value: range.min, clamped: true };
+  if (value > range.max) return { value: range.max, clamped: true };
+  return { value, clamped: false };
+}
+
+/**
+ * 解析一个语气参数：**工具传值 > 配置默认 > 不传**。
+ *
+ * 模型传了越界值不报错、夹到边界并把事实带回去（调用方拼进 notes），
+ * 因为「语速写 3」不该让整次语音失败——它只是想要快点说。
+ *
+ * @param {string} name 参数名（用于说明文案）
+ * @param {unknown} requested 模型传的值
+ * @param {unknown} fallback 配置默认（可为 null = 不传）
+ * @param {{min: number, max: number}} range
+ * @returns {{value: number|null, source: 'model'|'default'|'none', note?: string}}
+ */
+export function resolveTone(name, requested, fallback, range) {
+  const asked = normalizeOptionalTone(requested);
+  if (asked !== null) {
+    const { value, clamped } = clampTone(asked, range);
+    return clamped
+      ? { value, source: 'model', note: `${name} ${asked} 已夹到 ${value}` }
+      : { value, source: 'model' };
+  }
+  const preset = normalizeOptionalTone(fallback);
+  if (preset === null) return { value: null, source: 'none' };
+  const { value, clamped } = clampTone(preset, range);
+  return clamped
+    ? { value, source: 'default', note: `配置里的 ${name} ${preset} 已夹到 ${value}` }
+    : { value, source: 'default' };
+}
+
+/**
  * 决定这次用哪个音色。
  *
  * 模型拿到的是「id 或别名（label）」，两种都认：它看到的是 label，但真正要传给服务端的是 id。
@@ -300,6 +400,11 @@ export function readConfig(rawConfig) {
     voices: normalizeVoices(plain.voices),
     seedMode: SEED_MODES.includes(plain.seedMode) ? plain.seedMode : DEFAULT_CONFIG.seedMode,
     defaultSeed: normalizeSeed(plain.defaultSeed, DEFAULT_CONFIG.defaultSeed),
+    // 语气三参数：null = 不传该字段（服务端用它自己的默认）。
+    // 「键缺失」才回落到出厂默认；显式写 null 是「我要它别传」，两者不能混。
+    defaultRate: toneOr(plain.defaultRate, DEFAULT_CONFIG.defaultRate, RATE_RANGE),
+    defaultPitch: toneOr(plain.defaultPitch, DEFAULT_CONFIG.defaultPitch, PITCH_RANGE),
+    defaultVolume: toneOr(plain.defaultVolume, DEFAULT_CONFIG.defaultVolume, VOLUME_RANGE),
     apiKey: str(plain.apiKey, DEFAULT_CONFIG.apiKey),
     apiKeyEnv: str(plain.apiKeyEnv, DEFAULT_CONFIG.apiKeyEnv),
     format: str(plain.format, DEFAULT_CONFIG.format),

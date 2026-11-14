@@ -443,6 +443,24 @@ node scripts/make-market-index.mjs --repo https://github.com/<owner>/<repo> --wr
 | `qwen-audio-3.1-tts-*` | qianwenai `api/v1/services/audio/tts/SpeechSynthesizer` | ❌ 仍 `url error` |
 | `qwen-audio-3.0-tts-flash` | qianwenai `api/v1/services/audio/tts/SpeechSynthesizer` | ✅ 可用，且**支持复刻音色** |
 
+### 11.5.1 官方可调参数（全部交给模型自决）
+
+平台文档（非实时 Qwen-Audio-TTS HTTP API）的全部合成参数，**已全部接进 `qq_voice` 工具**，模型每次调用自行决定；配置里只留兜底默认：
+
+| 参数 | 工具参数 | 区间/默认 | 实测 |
+|---|---|---|---|
+| `input.rate`（语速） | `rate` | 0.5~2.0，默认 1.0 | ✅ 0.5→时长翻倍、2.0→减半 |
+| `input.pitch`（音调） | `pitch` | 0.5~2.0，默认 1.0 | ⚠️ **0.5 会产出约 12 秒异常长音频**，建议 0.8~1.2 微调 |
+| `input.volume`（音量） | `volume` | 0~100，默认 50 | ✅ 接受，但时长不变（未见响度验证手段） |
+| `input.seed` | `seed` | 整数 | ✅ 换 seed 换语气 |
+| `input.instruction` | `style` | 自然语言 | ✅ 控制情感/语气 |
+| `input.voice` | `voice` | 音色 id 或目录内名字 | ✅ 目录外的值会被拒绝并列出可选项 |
+| `input.format` / `sample_rate` | 配置项 | wav / 24000 | ✅ |
+
+**越界不报错**：插件夹到边界并在返回的 `notes` 里说明（服务端对 `rate=3.0` 会直接 400 引擎错，所以夹取是必须的）。
+
+**为什么参数放工具描述而不是系统提示**：工具 schema 每轮随请求下发（零额外上下文），且模型决定「要不要调、怎么调」时看的就是 schema；而 preset 的 `persona.prefix` 只有 60 字预算、是「反助手」风格锚点，塞参数说明会污染人格。
+
 **复刻音色**（系统音色只有 `qwen3-tts-flash` 那类支持，且它不支持复刻）：
 
 ```text

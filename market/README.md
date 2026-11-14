@@ -206,7 +206,9 @@ npm test
 
 ## 7. 新增一个插件要做什么（上架视角）
 
-> 与 [`../docs/05-handover/FEATURE-CHECKLIST.md`](../docs/05-handover/FEATURE-CHECKLIST.md) 呼应：那边从「写代码」出发，这里从「让它出现在市场里」出发。
+> 本节从「让它出现在市场里」出发，是**上架视角的补充**。
+> 完整的「新开一个插件」清单（包结构、bundle patch、client 半、测试、profile 安装三步、文档登记、常见坑）在
+> [`../docs/05-handover/CHANGE-PLAYBOOK.md`](../docs/05-handover/CHANGE-PLAYBOOK.md) **A 节**——以那节为准，本节只补市场侧差异，避免两套说法漂移。
 
 ### 7.1 包本身（缺一项市场就会显示得残缺）
 

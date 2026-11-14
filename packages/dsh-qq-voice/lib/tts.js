@@ -51,6 +51,9 @@ export function truncateText(text, maxChars) {
 export function renderTemplate(template, vars) {
   // 数字占位符：整数直接写，其余写 null（不能让 "undefined" 出现在 JSON 里）
   const seedRaw = Number.isInteger(vars.seed) ? String(vars.seed) : 'null';
+  // 语气三参数同样是数字占位。没给就渲染成官方默认值（1.0 / 1.0 / 50）：
+  // 有些服务端不接受 null，而把 {{rate}} 原样留在 JSON 里会让 JSON.parse 直接失败。
+  const numRaw = (value, fallback) => (Number.isFinite(value) ? String(value) : String(fallback));
   const quoteRaw = (value) => (typeof value === 'string' ? JSON.stringify(value).slice(1, -1) : '');
   const replaced = String(template)
     // 用函数形式避免 `$&` 这类替换模式被当成特殊指令
@@ -61,7 +64,10 @@ export function renderTemplate(template, vars) {
     .replace(/\{\{instruction\}\}/g, () => quoteRaw(vars.instruction))
     // 允许模板把 seed 写在引号里（"{{seed}}"）：那样会得到字符串，交给服务端判；
     // 我们不主动纠正，因为个别服务商确实要字符串。文档里推荐不加引号。
-    .replace(/\{\{seed\}\}/g, () => seedRaw);
+    .replace(/\{\{seed\}\}/g, () => seedRaw)
+    .replace(/\{\{rate\}\}/g, () => numRaw(vars.rate, 1.0))
+    .replace(/\{\{pitch\}\}/g, () => numRaw(vars.pitch, 1.0))
+    .replace(/\{\{volume\}\}/g, () => numRaw(vars.volume, 50));
   const parsed = JSON.parse(replaced);
   if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
     throw new Error('请求体模板必须是一个 JSON 对象');
@@ -75,7 +81,7 @@ export function renderTemplate(template, vars) {
  * 内置形状把 seed 放在 **`input.seed`**（qianwenai / DashScope 的原生 TTS 都是这个位置，
  * 放在 parameters 里会被忽略）。`instruction` 同样在 `input` 里，用于控制语气/方言/角色。
  *
- * @param {{text: string, model: string, voice?: string, format?: string, template?: string, seed?: number, instruction?: string}} opts
+ * @param {{text: string, model: string, voice?: string, format?: string, template?: string, seed?: number, instruction?: string, rate?: number, pitch?: number, volume?: number}} opts
  * @returns {Record<string, unknown>}
  */
 export function buildTtsBody(opts) {
@@ -83,6 +89,11 @@ export function buildTtsBody(opts) {
   const voice = typeof opts.voice === 'string' ? opts.voice : '';
   const format = typeof opts.format === 'string' ? opts.format : '';
   const instruction = typeof opts.instruction === 'string' ? opts.instruction.trim() : '';
+  // 语气三参数：非有限数字一律当作「不传」。
+  const tone = (value) => (Number.isFinite(value) ? value : undefined);
+  const rate = tone(opts.rate);
+  const pitch = tone(opts.pitch);
+  const volume = tone(opts.volume);
   if (typeof opts.template === 'string' && opts.template.trim() !== '') {
     return renderTemplate(opts.template, {
       text: opts.text,
@@ -91,6 +102,9 @@ export function buildTtsBody(opts) {
       format,
       seed: opts.seed,
       instruction,
+      rate,
+      pitch,
+      volume,
     });
   }
   /** @type {Record<string, unknown>} */
@@ -100,6 +114,10 @@ export function buildTtsBody(opts) {
   // 同理：seed/instruction 只在真的有值时才出现，避免把 null/空串塞给服务端。
   if (Number.isInteger(opts.seed)) input.seed = opts.seed;
   if (instruction !== '') input.instruction = instruction;
+  // 官方字段名就是 rate / pitch / volume，且都在 input 里（不在 parameters）。
+  if (rate !== undefined) input.rate = rate;
+  if (pitch !== undefined) input.pitch = pitch;
+  if (volume !== undefined) input.volume = volume;
   /** @type {Record<string, unknown>} */
   const body = { model, input };
   if (format !== '') body.parameters = { format };
@@ -212,6 +230,7 @@ export function describeHttpFailure(status, detail, model) {
  *   baseUrl: string, apiKey: string, text: string, model: string, voice?: string,
  *   format?: string, template?: string, timeoutMs?: number,
  *   seed?: number, instruction?: string,
+ *   rate?: number, pitch?: number, volume?: number,
  *   fetchImpl?: typeof fetch, signal?: AbortSignal,
  * }} opts
  * @returns {Promise<{ok: true, kind: 'url', url: string} | {ok: true, kind: 'b64', data: string} | {ok: false, error: string, status?: number}>}
@@ -238,6 +257,9 @@ export async function synthesize(opts) {
       template: opts.template,
       seed: opts.seed,
       instruction: opts.instruction,
+      rate: opts.rate,
+      pitch: opts.pitch,
+      volume: opts.volume,
     });
   } catch (error) {
     return { ok: false, error: `请求体模板不合法：${error instanceof Error ? error.message : String(error)}` };

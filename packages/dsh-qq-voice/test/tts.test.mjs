@@ -7,17 +7,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import {
-  DEFAULT_TTS_BASE_URL,
-  buildTtsBody,
-  describeHttpFailure,
-  extractAudio,
-  extractErrorMessage,
-  loadAudio,
-  renderTemplate,
-  synthesize,
-  truncateText,
-} from '../lib/tts.js';
+import { DEFAULT_TTS_BASE_URL, buildTtsBody, describeHttpFailure, extractAudio, extractErrorMessage, loadAudio, renderTemplate, synthesize, truncateText } from '../lib/tts.js';
 
 /** 造一个只返回一次的假 fetch。 */
 function fakeFetch(response) {
@@ -253,4 +243,34 @@ test('loadAudio：url 分支下载成功 / 失败 / 超限', async () => {
   const big = await loadAudio({ kind: 'url', url: 'https://x/a.wav' }, { fetchImpl: bigFetch, maxBytes: 5 });
   assert.equal(big.ok, false);
   assert.match(big.error, /太大/);
+});
+
+test('内置形状：语气三参数有值才写进 input，没值就不出现', () => {
+  const full = buildTtsBody({ text: 'hi', model: 'm', voice: 'v', format: 'wav', seed: 1, rate: 1.3, pitch: 0.8, volume: 70 });
+  assert.equal(full.input.rate, 1.3);
+  assert.equal(full.input.pitch, 0.8);
+  assert.equal(full.input.volume, 70);
+
+  const none = buildTtsBody({ text: 'hi', model: 'm', voice: 'v', format: 'wav', seed: 1 });
+  assert.equal('rate' in none.input, false);
+  assert.equal('pitch' in none.input, false);
+  assert.equal('volume' in none.input, false);
+
+  // 非有限值也当作没给（NaN / Infinity 不该出现在 JSON 里，否则就是 null）
+  const bad = buildTtsBody({ text: 'hi', model: 'm', rate: Number.NaN, pitch: Number.POSITIVE_INFINITY, volume: Number.NaN });
+  assert.equal('rate' in bad.input, false);
+  assert.equal('pitch' in bad.input, false);
+  assert.equal('volume' in bad.input, false);
+});
+
+test('模板占位 {{rate}}/{{pitch}}/{{volume}}：替换成数字，缺省用官方默认值', () => {
+  const tpl = '{"model":"{{model}}","input":{"text":"{{text}}","rate":{{rate}},"pitch":{{pitch}},"volume":{{volume}}}}';
+  const given = buildTtsBody({ text: 'hi', model: 'm', template: tpl, rate: 1.5, pitch: 0.9, volume: 30 });
+  assert.deepEqual(given.input, { text: 'hi', rate: 1.5, pitch: 0.9, volume: 30 });
+
+  const missing = buildTtsBody({ text: 'hi', model: 'm', template: tpl });
+  assert.deepEqual(missing.input, { text: 'hi', rate: 1, pitch: 1, volume: 50 }, '缺省要落成官方默认值，不能让占位符残留');
+  // 确认渲染出来的是数字而不是字符串
+  assert.equal(typeof missing.input.rate, 'number');
+  assert.equal(typeof missing.input.volume, 'number');
 });

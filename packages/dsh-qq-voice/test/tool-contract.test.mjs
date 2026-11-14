@@ -395,3 +395,113 @@ test('参数组合：音色 + seed + style 一起传，全部生效', async () =
   assert.equal(r.voice, VOICES[1].id);
   assert.equal(r.seed, 7);
 });
+
+test('语气三参数：传给 TTS 并回报实际用的值', async () => {
+  let got = null;
+  const { tool } = makeTool({
+    synth: async (opts) => { got = opts; return { ok: true, kind: 'b64', data: 'AAAA' }; },
+  });
+  const r = await tool.execute(
+    { text: '你好', rate: 1.4, pitch: 0.8, volume: 70 },
+    { agent: agentWith(OWNER_TEXT) },
+  );
+  assert.equal(r.ok, true);
+  assert.equal(got.rate, 1.4);
+  assert.equal(got.pitch, 0.8);
+  assert.equal(got.volume, 70);
+  assert.equal(r.rate, 1.4);
+  assert.equal(r.pitch, 0.8);
+  assert.equal(r.volume, 70);
+  assert.equal(r.notes, undefined, '没越界就不该有 notes');
+});
+
+test('语气三参数：越界夹取并在 notes 里说明', async () => {
+  let got = null;
+  const { tool } = makeTool({
+    synth: async (opts) => { got = opts; return { ok: true, kind: 'b64', data: 'AAAA' }; },
+  });
+  const r = await tool.execute(
+    { text: '你好', rate: 5, pitch: 0.1, volume: 500 },
+    { agent: agentWith(OWNER_TEXT) },
+  );
+  assert.equal(r.ok, true, '越界不该让整次调用失败');
+  assert.equal(got.rate, 2);
+  assert.equal(got.pitch, 0.5);
+  assert.equal(got.volume, 100);
+  assert.deepEqual(r.notes, ['rate 5 已夹到 2', 'pitch 0.1 已夹到 0.5', 'volume 500 已夹到 100']);
+});
+
+test('语气三参数：不传且配置没默认时，不写进请求', async () => {
+  let got = null;
+  const { tool } = makeTool({
+    config: { defaultRate: null, defaultPitch: null, defaultVolume: null },
+    synth: async (opts) => { got = opts; return { ok: true, kind: 'b64', data: 'AAAA' }; },
+  });
+  const r = await tool.execute({ text: '你好' }, { agent: agentWith(OWNER_TEXT) });
+  assert.equal(r.ok, true);
+  assert.equal(got.rate, undefined);
+  assert.equal(got.pitch, undefined);
+  assert.equal(got.volume, undefined);
+  assert.equal(r.rate, '(服务端默认)');
+});
+
+test('语气三参数：配置默认生效，工具值优先', async () => {
+  const seen = [];
+  const { tool } = makeTool({
+    config: { defaultRate: 0.8, defaultPitch: 1.2, defaultVolume: 40 },
+    synth: async (opts) => { seen.push({ rate: opts.rate, pitch: opts.pitch, volume: opts.volume }); return { ok: true, kind: 'b64', data: 'AAAA' }; },
+  });
+  await tool.execute({ text: '一' }, { agent: agentWith(OWNER_TEXT) });
+  assert.deepEqual(seen[0], { rate: 0.8, pitch: 1.2, volume: 40 }, '没传就该用配置默认');
+
+  await tool.execute({ text: '二', rate: 1.9 }, { agent: agentWith(OWNER_TEXT) });
+  assert.deepEqual(seen[1], { rate: 1.9, pitch: 1.2, volume: 40 }, '工具值要覆盖默认');
+});
+
+test('语气三参数：与非数字输入共存时不崩（视作没给）', async () => {
+  let got = null;
+  const { tool } = makeTool({
+    config: { defaultRate: null, defaultPitch: null, defaultVolume: null },
+    synth: async (opts) => { got = opts; return { ok: true, kind: 'b64', data: 'AAAA' }; },
+  });
+  const r = await tool.execute(
+    { text: '你好', rate: '快一点', pitch: null, volume: '' },
+    { agent: agentWith(OWNER_TEXT) },
+  );
+  assert.equal(r.ok, true);
+  assert.equal(got.rate, undefined);
+  assert.equal(got.pitch, undefined);
+  assert.equal(got.volume, undefined);
+});
+
+test('参数组合：voice + seed + style + rate/pitch/volume 同时生效', async () => {
+  let got = null;
+  const { tool } = makeTool({
+    config: { voices: VOICES, seedMode: 'model' },
+    synth: async (opts) => { got = opts; return { ok: true, kind: 'b64', data: 'AAAA' }; },
+  });
+  const r = await tool.execute(
+    { text: '你好呀', voice: 'Cherry', seed: 7, style: '轻快', rate: 1.2, pitch: 1.1, volume: 60 },
+    { agent: agentWith(OWNER_TEXT) },
+  );
+  assert.equal(r.ok, true);
+  assert.equal(got.voice, VOICES[1].id);
+  assert.equal(got.seed, 7);
+  assert.equal(got.instruction, '轻快');
+  assert.equal(got.rate, 1.2);
+  assert.equal(got.pitch, 1.1);
+  assert.equal(got.volume, 60);
+});
+
+test('工具描述：写清 rate/pitch 的情绪用法', () => {
+  const { tool } = makeTool();
+  assert.match(tool.description, /rate 语速/);
+  assert.match(tool.description, /pitch 音调/);
+  assert.match(tool.description, /volume 音量/);
+  assert.match(tool.description, /慵懒/, '要说明什么情绪该调低语速');
+  assert.match(tool.description, /notes/, '要告诉模型越界会出现在 notes 里');
+  // 参数表里也要有，模型才看得到
+  for (const key of ['rate', 'pitch', 'volume']) {
+    assert.equal(tool.parameters[key].type, 'number', key + ' 应是数字参数');
+  }
+});

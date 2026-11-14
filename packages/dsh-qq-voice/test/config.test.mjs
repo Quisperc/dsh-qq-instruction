@@ -8,7 +8,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { Config, DEFAULT_CONFIG, MODES, normalizeSeed, normalizeVoices, readConfig, resolveApiKey, resolveSeed, resolveVoice, SEED_LIMIT, toolsEnabled } from '../lib/config.js';
+import { Config, DEFAULT_CONFIG, MODES, normalizeSeed, normalizeVoices, readConfig, resolveApiKey, resolveSeed, resolveVoice, SEED_LIMIT, toolsEnabled, resolveTone, RATE_RANGE, PITCH_RANGE, VOLUME_RANGE } from '../lib/config.js';
 
 test('出厂默认值：默认关闭、manual、ownerOnly、每小时 6 条', () => {
   const cfg = readConfig({});
@@ -181,4 +181,62 @@ test('非法 seedMode 回落 model', () => {
   assert.equal(readConfig({ seedMode: 'random' }).seedMode, 'random');
   assert.equal(readConfig({ seedMode: 'nonsense' }).seedMode, 'model');
   assert.equal(readConfig({ seedMode: 42 }).seedMode, 'model');
+});
+
+test('resolveTone 三态：模型值 > 配置默认 > 不传', () => {
+  // 模型给了合法值
+  assert.deepEqual(resolveTone('rate', 1.4, 1.0, RATE_RANGE), { value: 1.4, source: 'model' });
+  // 模型没给 → 配置默认
+  assert.deepEqual(resolveTone('rate', undefined, 0.8, RATE_RANGE), { value: 0.8, source: 'default' });
+  // 都没有 → 不传（value=null）
+  assert.deepEqual(resolveTone('rate', undefined, null, RATE_RANGE), { value: null, source: 'none' });
+  // 空串/NaN 视作没给
+  assert.equal(resolveTone('pitch', '', 1.2, PITCH_RANGE).source, 'default');
+  assert.equal(resolveTone('pitch', 'abc', null, PITCH_RANGE).value, null);
+});
+
+test('resolveTone 越界夹到边界，并写明被夹过', () => {
+  const hi = resolveTone('rate', 3, null, RATE_RANGE);
+  assert.equal(hi.value, 2);
+  assert.equal(hi.source, 'model');
+  assert.match(hi.note, /rate 3 已夹到 2/);
+
+  const lo = resolveTone('pitch', 0.1, null, PITCH_RANGE);
+  assert.equal(lo.value, 0.5);
+  assert.match(lo.note, /pitch 0.1 已夹到 0.5/);
+
+  const vol = resolveTone('volume', 200, null, VOLUME_RANGE);
+  assert.equal(vol.value, 100);
+  assert.match(vol.note, /volume 200 已夹到 100/);
+
+  // 配置里的值越界也要夹，并且 note 说明是配置的问题
+  const cfgClamp = resolveTone('volume', undefined, 999, VOLUME_RANGE);
+  assert.equal(cfgClamp.value, 100);
+  assert.match(cfgClamp.note, /配置里的 volume 999 已夹到 100/);
+});
+
+test('readConfig：语气三参数归一，非法值变 null（= 不传）', () => {
+  const cfg = readConfig({ defaultRate: '1.5', defaultPitch: 'abc', defaultVolume: 0 });
+  assert.equal(cfg.defaultRate, 1.5, '数字字符串要能读成数字');
+  assert.equal(cfg.defaultPitch, null, '非数字回落 null');
+  assert.equal(cfg.defaultVolume, 0, '0 是合法音量，不能当缺失');
+
+  const empty = readConfig({});
+  assert.equal(empty.defaultRate, 1.0);
+  assert.equal(empty.defaultPitch, 1.0);
+  assert.equal(empty.defaultVolume, 50);
+});
+
+test('语气三参数哨兵：rate/pitch 的 0 与 volume 的负数都表示「不传」', () => {
+  // rate/pitch 合法区间从 0.5 起，写 0 只可能是「不要传」
+  assert.equal(readConfig({ defaultRate: 0 }).defaultRate, null);
+  assert.equal(readConfig({ defaultPitch: 0 }).defaultPitch, null);
+  // volume 的 0 是合法音量（静音），不能当哨兵
+  assert.equal(readConfig({ defaultVolume: 0 }).defaultVolume, 0);
+  assert.equal(readConfig({ defaultVolume: -1 }).defaultVolume, null);
+  // 显式 null 也是不传
+  assert.equal(readConfig({ defaultRate: null }).defaultRate, null);
+  // 键缺失才回落到出厂默认
+  assert.equal(readConfig({}).defaultRate, 1.0);
+  assert.equal(readConfig({}).defaultVolume, 50);
 });

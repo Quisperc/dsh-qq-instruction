@@ -169,7 +169,13 @@ qqbot/
 ## 3. 新增功能流程
 
 > **本节只回答「走哪条路线」**（A 配置 / B 新工具插件 / C 人格卡 / D 上游 PR / E 本地私有）。
-> 路线定了之后要**动哪些文件、按什么顺序做**，看 [`./docs/05-handover/FEATURE-CHECKLIST.md`](./docs/05-handover/FEATURE-CHECKLIST.md)。
+> 路线定了之后：
+> - 想知道**「这次加的这类东西该动哪些文件」**（新插件 / 新工具 / 新配置项 / 新厂商端点 / 新 preset 行 / 敏感能力 / 文档 / 发版上架 / 下线）→
+>   看 [`./docs/05-handover/CHANGE-PLAYBOOK.md`](./docs/05-handover/CHANGE-PLAYBOOK.md)（**按变更类型索引**，每类带文件级清单、必加测试、常见坑、验收命令）
+> - 想按**「从上到下的执行顺序」**勾一遍（动手前 → ADR → 代码 → 测试 → 文档 → 发版）→
+>   看 [`./docs/05-handover/FEATURE-CHECKLIST.md`](./docs/05-handover/FEATURE-CHECKLIST.md)
+>
+> 两篇互补：手册回答「改什么」，清单回答「按什么顺序改」。不要合并成一篇。
 
 ### 3.1 决策树（第一步永远是这个）
 

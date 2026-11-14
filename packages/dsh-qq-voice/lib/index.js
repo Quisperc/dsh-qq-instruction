@@ -17,6 +17,7 @@
 import fs from 'node:fs';
 
 import { Config, readConfig, resolveApiKey, resolveSeed, resolveVoice, toolsEnabled } from './config.js';
+import { RATE_RANGE, PITCH_RANGE, VOLUME_RANGE, resolveTone } from './config.js';
 import { checkTarget, createThrottle, parseSpeaker, readPolicyFromText } from './guard.js';
 import { OneBotSender } from './sender.js';
 import { synthesize, loadAudio, truncateText } from './tts.js';
@@ -120,6 +121,12 @@ export function buildToolDescription(cfg) {
   }
 
   parts.push('style 是可选的自然语言语气说明（如「慢一点、压低声音」），仅当端点与请求体模板支持 instruction 时才会生效，否则被忽略。');
+  parts.push('还有三个数字参数，用来把「怎么念」具体化：'
+    + 'rate 语速 0.5~2.0（1.0 正常；想表现慵懒/犹豫就 <1，想催人或兴奋就 >1）、'
+    + 'pitch 音调 0.5~2.0（<1 更低沉，>1 更轻更年轻）、'
+    + 'volume 音量 0~100（默认 50；悄悄话可以调低，但别指望它替你把声音做小）。'
+    + '经验值：pitch 往上调只是变短变细，往下调到 0.5 会被服务端拖成十几秒的长音频，建议在 0.8~1.2 之间微调。'
+    + '越界会自动夹到边界并在返回的 notes 里告诉你。');
   parts.push('文本会被字数上限截断；只给拥有者用；有每小时条数与冷却限制，被拒时会告诉你还差多少秒。');
   return parts.join('');
 }
@@ -156,6 +163,9 @@ export function createVoiceTool(deps) {
       voice: { type: 'string', description: '音色 id 或名字（留空 = 用配置默认；可选值见工具描述）' },
       seed: { type: 'number', description: '随机种子 0 ≤ seed < 2^31，换 seed 会换语气与节奏（留空 = 按部署策略）' },
       style: { type: 'string', description: '可选语气说明，如「慢一点、压低声音」；端点不支持时忽略' },
+      rate: { type: 'number', description: '语速 0.5~2.0（1.0 正常，<1 更慢）。表现慵懒/犹豫就调低，催人或兴奋就调高；留空 = 用配置默认' },
+      pitch: { type: 'number', description: '音调 0.5~2.0（1.0 正常，<1 更低更沉）。留空 = 用配置默认' },
+      volume: { type: 'number', description: '音量 0~100（默认 50）。留空 = 用配置默认' },
       message_type: { type: 'string', description: 'group 或 private（默认按当前会话推断）' },
       target_id: { type: 'string', description: '群号或 QQ 号（默认当前会话）' },
     },
@@ -221,6 +231,15 @@ export function createVoiceTool(deps) {
       if (pickedVoice.ok !== true) return { ok: false, error: pickedVoice.error };
       const pickedSeed = resolveSeed(cfg, args?.seed, random);
       const instruction = typeof args?.style === 'string' ? args.style.trim() : '';
+      // 语气三参数：工具传值 > 配置默认 > 不传（服务端默认）。越界夹取并记进 notes。
+      const pickedRate = resolveTone('rate', args?.rate, cfg.defaultRate, RATE_RANGE);
+      const pickedPitch = resolveTone('pitch', args?.pitch, cfg.defaultPitch, PITCH_RANGE);
+      const pickedVolume = resolveTone('volume', args?.volume, cfg.defaultVolume, VOLUME_RANGE);
+      /** @type {string[]} */
+      const notes = [];
+      for (const item of [pickedRate, pickedPitch, pickedVolume]) {
+        if (typeof item.note === 'string' && item.note !== '') notes.push(item.note);
+      }
 
       // 7) 合成 → 下载 → 发送
       const apiKey = resolveApiKey(cfg);
@@ -234,6 +253,9 @@ export function createVoiceTool(deps) {
         template: cfg.requestTemplate,
         seed: pickedSeed.seed,
         instruction,
+        rate: pickedRate.value === null ? undefined : pickedRate.value,
+        pitch: pickedPitch.value === null ? undefined : pickedPitch.value,
+        volume: pickedVolume.value === null ? undefined : pickedVolume.value,
         timeoutMs: cfg.timeoutMs,
         signal: exec?.signal,
       });
@@ -267,7 +289,12 @@ export function createVoiceTool(deps) {
         voiceSource: pickedVoice.source,
         seed: pickedSeed.seed,
         seedSource: pickedSeed.source,
+        rate: pickedRate.value === null ? '(服务端默认)' : pickedRate.value,
+        pitch: pickedPitch.value === null ? '(服务端默认)' : pickedPitch.value,
+        volume: pickedVolume.value === null ? '(服务端默认)' : pickedVolume.value,
         ...(instruction === '' ? {} : { style: instruction }),
+        // 被夹取时如实说明：模型下次才知道自己给的值不合法
+        ...(notes.length === 0 ? {} : { notes }),
         ...(truncated ? { note: `原文本 ${originalChars} 字，已截断到 ${cfg.maxChars} 字` } : {}),
         remaining: stats.remaining === Infinity ? '不限' : stats.remaining,
       };
