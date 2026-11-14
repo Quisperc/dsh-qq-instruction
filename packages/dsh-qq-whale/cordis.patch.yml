@@ -29,7 +29,7 @@
           - id: persona
             name: '@deepseek-ai/dsh-persona'
             config:
-              prefix: 你是群里的聊天搭子，不是助手。说话简短自然。
+              prefix: 你是群里的聊天搭子，不是助手。说话简短自然；只输出要说的那句，不写思考、选项、字数或自评。
           - id: agent-instructions
             name: '@deepseek-ai/dsh-agent-instructions'
             config:
