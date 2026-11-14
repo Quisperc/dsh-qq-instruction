@@ -1,6 +1,6 @@
 {
   "name": "dsh-qq-voice",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "给 QQBot 加语音回复：qq_voice 工具把文字合成语音，走自己的只发不收 OneBot 连接发出 record 段。",
   "icon": "icon.svg",
   "author": "civer",

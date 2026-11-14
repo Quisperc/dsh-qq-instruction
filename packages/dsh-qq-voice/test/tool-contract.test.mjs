@@ -505,3 +505,35 @@ test('工具描述：写清 rate/pitch 的情绪用法', () => {
     assert.equal(tool.parameters[key].type, 'number', key + ' 应是数字参数');
   }
 });
+
+test('lastUserText：跳过 time-context 的 pseudo-user 消息（群聊语音失败的根因）', () => {
+  // 2026-11-15 真机 bug：群里调用 qq_voice 报「当前会话不是 QQ 会话」，
+  // 因为 DSH 的 time-context 在本回合末尾插了一条 pseudo-user 消息。
+  const agent = {
+    session: {
+      snapshotEvents: () => [
+        { type: 'user/message', data: { id: 'qqmsg-mwgs4jmc-1-9j5pcg', content: [{ type: 'text', text: OWNER_TEXT }] } },
+        { type: 'assistant/message', data: { message: { content: [] } } },
+        { type: 'user/message', data: { id: 'time-context-1', content: [{ type: 'text', text: 'Time sampled while preparing turn 20, step 1: 2026-11-15T03:00:00+08:00[Asia/Shanghai]' }] } },
+      ],
+    },
+  };
+  assert.equal(lastUserText(agent), OWNER_TEXT, '应回看并取到真正的 QQ 消息');
+
+  // 即使没有 qqmsg- id，只要正文是 QQ 消息头也应被采用
+  const noId = {
+    session: {
+      snapshotEvents: () => [
+        { type: 'user/message', data: { content: [{ type: 'text', text: '[QQ群 778916943 · 某人(123) · 身份:访客] 在吗' }] } },
+        { type: 'user/message', data: { content: [{ type: 'text', text: 'Time sampled while preparing turn 3, step 1: 2026' }] } },
+      ],
+    },
+  };
+  assert.match(lastUserText(noId), /^\[QQ群/);
+
+  // 全是 pseudo 消息时返回空串（交给上层报「不是 QQ 会话」）
+  const onlyTime = {
+    session: { snapshotEvents: () => [{ type: 'user/message', data: { content: [{ type: 'text', text: 'Time sampled while preparing turn 1' }] } }] },
+  };
+  assert.equal(lastUserText(onlyTime), '');
+});

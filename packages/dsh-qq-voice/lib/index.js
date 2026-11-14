@@ -54,17 +54,35 @@ export function lastUserText(agent) {
     const events = typeof session.snapshotEvents === 'function'
       ? session.snapshotEvents()
       : (Array.isArray(session.events) ? session.events : []);
-    for (let i = events.length - 1; i >= 0; i -= 1) {
+    /**
+     * 不能简单取「最后一条 user/message」。
+     *
+     * 2026-11-15 真机 bug：群里发语音失败，报「当前会话不是 QQ 会话」——因为 DSH 的
+     * time-context 会在每个回合插入一条 pseudo-user 消息（正文形如
+     * `Time sampled while preparing turn N, step 1: …`），它排在真正的 QQ 消息之后，
+     * 于是「最后一条 user 消息」拿到的不是消息头。
+     *
+     * 判据按可靠性排序：
+     *   1. qq-bot 的入站消息事件 id 形如 `qqmsg-<turn>-<seq>`（最可靠，不依赖正文格式）；
+     *   2. 正文以 `[QQ群 …` / `[QQ私聊 …` 开头（兜底，防止 id 规则变更）。
+     * 只回看最近 20 条 user 消息，避免在长会话里做无意义的全量扫描。
+     */
+    let scanned = 0;
+    for (let i = events.length - 1; i >= 0 && scanned < 20; i -= 1) {
       const event = events[i];
       if (event?.type !== 'user/message') continue;
+      scanned += 1;
       // user/message 的 data 就是消息本身（其它类型才是 data.message）。
       const content = event.data?.content;
-      if (!Array.isArray(content)) return '';
+      if (!Array.isArray(content)) continue;
       const text = content
         .filter((block) => block?.type === 'text' && typeof block.text === 'string')
         .map((block) => block.text)
         .join('');
-      return text;
+      const id = typeof event.data?.id === 'string' ? event.data.id : '';
+      // 注意：不要用 \b——JS 的 \w 只含 ASCII，中文后面接空格/标点时 "\b" 永远不成立。
+      const looksQq = id.startsWith('qqmsg-') || /^\[QQ(群|私聊)/.test(text);
+      if (looksQq) return text;
     }
     return '';
   } catch {

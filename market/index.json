@@ -65,11 +65,11 @@
       "versions": [
         {
           "version": "0.6.1",
-          "publishTimestamp": 1794685035,
+          "publishTimestamp": 1794685291,
           "source": {
             "type": "git",
             "url": "https://github.com/Quisperc/dsh-qq-instruction",
-            "commit": "1eabb233847b0bac2de2d42b0234ee5da0243f21",
+            "commit": "40dc2f09152a128dc7b56bd862f80a596fba04a8",
             "path": "packages/dsh-qq-vault"
           },
           "engines": {
@@ -136,6 +136,19 @@
         ]
       },
       "versions": [
+        {
+          "version": "0.3.2",
+          "publishTimestamp": 1794685291,
+          "source": {
+            "type": "git",
+            "url": "https://github.com/Quisperc/dsh-qq-instruction",
+            "commit": "40dc2f09152a128dc7b56bd862f80a596fba04a8",
+            "path": "packages/dsh-qq-voice"
+          },
+          "engines": {
+            "dsh": ">=0.2.0-rc.2 <0.3.0"
+          }
+        },
         {
           "version": "0.3.1",
           "publishTimestamp": 1794685035,
@@ -224,11 +237,11 @@
       "versions": [
         {
           "version": "0.14.3",
-          "publishTimestamp": 1794685035,
+          "publishTimestamp": 1794685291,
           "source": {
             "type": "git",
             "url": "https://github.com/Quisperc/dsh-qq-instruction",
-            "commit": "1eabb233847b0bac2de2d42b0234ee5da0243f21",
+            "commit": "40dc2f09152a128dc7b56bd862f80a596fba04a8",
             "path": "packages/dsh-qq-whale"
           },
           "engines": {
