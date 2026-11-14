@@ -373,7 +373,8 @@ git clone https://github.com/Quisperc/dsh-qq-instruction
 git pull --rebase                      # 1. 先拉
 # ...改文件、跑验证...
 git add -A && git commit -m "docs: xxx" # 2. 提交
-git push                                # 3. 推
+npm run push:all                        # 3. 推（GitHub + CNB 镜像，需 GITHUB_TOKEN / CNB_TOKEN）
+# 只推一个源也行：git push gh main / git push origin main
 ```
 
 ### 版本号（**双轨，别混**）

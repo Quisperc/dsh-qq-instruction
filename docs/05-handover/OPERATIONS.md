@@ -352,6 +352,26 @@ dsh-qq-vault ──> 独立（读写 profile 配置、记忆库；不依赖 whal
 > 历史说明：仓库原先托管在私有 CNB（`cnb.cool/civer/…`，需令牌克隆）。**现在已不再需要连 CNB**，
 > 文档与脚本里的地址都已换成 GitHub；若在旧记录里看到 CNB，那是迁移前的历史。
 
+**双推送**：GitHub 是主源（市场与 Pages 都读它），CNB 是镜像。一条命令推两边：
+
+```bash
+GITHUB_TOKEN=... CNB_TOKEN=... npm run push:all          # 正常推送
+GITHUB_TOKEN=... CNB_TOKEN=... npm run push:all -- --force   # 重写历史后
+```
+
+凭据只从环境变量读，**不写进 `.git/config`**——踩过的坑：`git push -u <带令牌的 URL>` 会把令牌明文写进
+`branch.<name>.remote`，事后要手动改回。
+
+### 11.1.1 许可布局（双许可，按内容划界）
+
+| 内容 | 许可 | 文件 |
+|---|---|---|
+| 代码、脚本、配置、文档、索引 | **MIT**（纯原文，GitHub 能识别） | `LICENSE` |
+| 人格形象与人格卡（`persona/`、配置里的 `persona.text`） | **CC BY-NC-SA 4.0** | `LICENSE-PERSONA` |
+
+> `LICENSE` 必须是**纯 MIT 原文**：一旦在末尾追加任何说明文字，GitHub 的 license 识别会退化成
+> `NOASSERTION`（本项目已踩过）。范围说明一律写进 `LICENSE-PERSONA` 与 README。
+
 ### 11.2 发一个新版本（三步，顺序不能换）
 
 ```bash
