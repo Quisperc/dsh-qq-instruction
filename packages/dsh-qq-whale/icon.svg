@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="dsh-qq-whale">
+  <title>dsh-qq-whale</title>
+  <!-- 鲸鱼：代表「大肥鱼」；背上的方框代表受限的工具面 -->
+  <rect width="64" height="64" rx="14" fill="#1B6FD6"/>
+  <path d="M12 38c0-9 7.6-16 17-16 8.2 0 13.6 4.4 15.6 10.2l7.8-4.2c1.2-.6 2.6.3 2.6 1.7v9.6c0 1.4-1.4 2.3-2.6 1.7l-7.6-4.1C42.8 43 35.4 47 28 47c-9 0-16-4-16-9z" fill="#EAF3FF"/>
+  <circle cx="24" cy="34" r="2.4" fill="#1B6FD6"/>
+  <path d="M28 47c0 3.4 2.2 6 5 6" fill="none" stroke="#EAF3FF" stroke-width="2.6" stroke-linecap="round"/>
+  <rect x="30" y="18" width="14" height="10" rx="2.4" fill="#0E4E9E" stroke="#EAF3FF" stroke-width="1.6"/>
+  <path d="M33.5 18v-2.6a3.5 3.5 0 0 1 7 0V18" fill="none" stroke="#EAF3FF" stroke-width="1.8" stroke-linecap="round"/>
+</svg>

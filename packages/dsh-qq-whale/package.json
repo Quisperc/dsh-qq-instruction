@@ -1,0 +1,92 @@
+{
+  "name": "dsh-qq-whale",
+  "version": "0.14.0",
+  "description": "给 QQ 会话提供受限 Agent preset（id: qq），并在设置页热调工具面收窄。",
+  "icon": "icon.svg",
+  "author": "civer",
+  "type": "module",
+  "main": "lib/index.js",
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  },
+  "exports": {
+    ".": "./lib/index.js",
+    "./package.json": "./package.json",
+    "./agent-guard": "./lib/agent-guard.js",
+    "./client": {
+      "default": "./lib/client/settings.js"
+    },
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "lib",
+    "CHANGELOG.md",
+    "cordis.patch.yml",
+    "icon.svg",
+    "LICENSE",
+    "locale",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=22.6",
+    "dsh": ">=0.2.0-rc.2"
+  },
+  "dsh": {
+    "runtime": "host",
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "compatibility": {
+      "dsh": ">=0.2.0-rc.2 <0.3.0"
+    },
+    "catalog": {
+      "category": "preset",
+      "summary": {
+        "en": "Adds a restricted Agent preset (id: qq) for QQ chats and enforces its tool surface.",
+        "zh": "为 QQ 群聊提供受限 Agent preset（id: qq），并在设置页热调工具面收窄。"
+      },
+      "capabilities": [
+        "preset",
+        "tool-guard"
+      ]
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-settings"
+      ]
+    }
+  },
+  "meta": {
+    "title": "QQ 群聊受限预设（preset-qq）",
+    "description": "装上即多一张 preset-qq；设置页可热调收窄强度与工具白名单。"
+  },
+  "keywords": [
+    "dsh",
+    "qq",
+    "preset",
+    "tool-guard",
+    "dsh-plugin",
+    "onebot",
+    "napcat",
+    "agent-preset",
+    "tool-surface"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://cnb.cool/civer/dsh-qq-instruction.git",
+    "directory": "packages/dsh-qq-whale"
+  },
+  "homepage": "https://cnb.cool/civer/dsh-qq-instruction/-/tree/main/packages/dsh-qq-whale",
+  "bugs": {
+    "url": "https://cnb.cool/civer/dsh-qq-instruction/-/issues"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@deepseek-ai/schemastery": "^3.18.5"
+  },
+  "devDependencies": {
+    "cordis": "^3.18.1",
+    "js-yaml": "^4.3.2"
+  }
+}

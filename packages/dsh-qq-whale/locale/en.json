@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "QQ chat preset (preset-qq)",
+    "description": "Adds a restricted Agent preset (id: qq) for QQ chats, and lets you tune the tool surface from the settings page."
+  }
+}
