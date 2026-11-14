@@ -4,6 +4,17 @@
 > 每次改动都要记一笔——**半年后你会想知道当时为什么这么改**。
 > 版本号是**双轨**的（项目本体 + 插件包），规则见 CONTRIBUTING §6。
 
+## [1.27.0] - 2026-11-14（生图打通）
+
+### Added
+- 启用 `qq_draw` 生图：火山方舟 Seedream 4.0（`doubao-seedream-4-0-20260415`）
+- 真相：DashScope 的 compatible-mode **没有** `/images/generations`（实测 404），不是缺 key 的问题
+- 端到端验证：qq-bot 自己的 `generateImage` 代码路径 → 200 / 1024x1024 / 286KB，图内容正确
+
+### Notes
+- `qq_draw` 硬编码仅拥有者可用；群友触发会被拒（原厂行为，不打补丁）
+- 查可用模型的正确姿势：`GET /api/v3/models` 筛 `api_supported["images/generations"]`；同厂商不同日期的 ID 可能一个存在一个 404
+
 ## [1.26.0] - 2026-11-14（撤回补丁方案）
 
 ### Removed

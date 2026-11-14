@@ -297,7 +297,19 @@ cd /tmp && dsh --profile web --dump-config > /dev/null; echo $?      # 改之前
 | 联网（`qq_websearch` / `qq_webfetch` / `web_search` / `web_fetch`） | ✅ 可用 | — |
 | 群历史、图片反搜 | ✅ 可用 | — |
 | **识图** | ✅ 可用（qq-bot 0.14.0 原生附件；两项留空即走这条路） | 若把 `vision.provider/model` 任填一项，会退回「先描述再并入」，反而多一次调用 |
-| **生图** | ❌ 不通 | 缺 key（`DASHSCOPE_API_KEY` 未注入）+ 端点不兼容（插件只拼 `<baseUrl>/images/generations`，DashScope 该路径 404） |
+| **生图** | ✅ 已打通（2026-11-14 深夜） | 火山方舟 Seedream 4.0。参数：`baseUrl=https://ark.cn-beijing.volces.com/api/v3`、`model=doubao-seedream-4-0-20260415`、`size=1024x1024`、`enabled=true`，key 存在 `imageGen.apiKey`（600 权限 profile，已 gitignore） |
+
+**生图要点（换厂商/换模型时看这里）**
+
+| 项 | 事实 |
+|---|---|
+| 端点形状 | 插件写死 `POST <baseUrl>/images/generations`（`lib/tools/imagegen.js:17`） |
+| **DashScope 不可用** | 它的 compatible-mode **没有这个路径，实测 404**——不是缺 key，是端点根本没有 |
+| 模型 ID 必须准确 | 本账号可用的是 `doubao-seedream-4-0-20260415`；`doubao-seedream-4-0-250828` 在这里是 404 |
+| 查可用模型 | `GET https://ark.cn-beijing.volces.com/api/v3/models`（带 Bearer），筛 `api_supported['images/generations']` |
+| 返回格式 | 同步 200，`data[0].url` + `size`；图是 JPEG，但发送走 `base64://`，**扩展名不影响** |
+| 权限 | `qq_draw` **硬编码仅拥有者可用**（`lib/tools/index.js:1019`），群友让它画会被拒 |
+| 耗时 | 单张 7–12 秒；`timeoutMs` 180 秒足够，失败会自动重试 |
 | **TTS** | ❌ 未实现 | 需新写工具（100–200 行）+ 出站 record 段 + 音频需公网可访问 URL（NapCat 在远端读不到本地文件） |
 | **STT** | ❌ 未实现 | 需 `get_record` 取音频 → VAD → ASR → 注入；工作量大于 TTS |
 | 表情包 | ✅ 2026-11-14 开启 `sticker.enabled` + `sticker.collect`（存与偷）；`qq_sticker` 已进 whale 白名单（24 项） |
@@ -306,7 +318,7 @@ cd /tmp && dsh --profile web --dump-config > /dev/null; echo $?      # 改之前
 | 气泡拆分 | ✅ 默认开（≤80 字/段、最多 3 段）；2026-11-14 调成 0.6–2.2 秒间隔（原默认 0–5 秒，第二句可能隔 5 秒才来） | 想静音：`enabled: false`；想只观察：把 `dryRun` 改回 true（会持续烧 token） |
 | 群管理 | ❌ 整体关 | `admin.enabled=false` |
 
-**建议顺序**：先补 key 打通生图（改动最小）→ 再 TTS（先趟音频托管）→ 最后 STT。
+**建议顺序**：生图已打通 → 下一步 TTS（先趟音频托管）→ 最后 STT。
 
 ## 10. 依赖与可卸载性
 
