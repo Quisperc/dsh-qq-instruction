@@ -64,7 +64,7 @@
 设置 → 插件 → **发现** → 索引菜单 →「管理索引来源」→ 添加：
 
 ```
-https://github.com/OWNER/REPO/raw/main/market/index.json
+https://cnb.cool/civer/dsh-qq-instruction/raw/main/market/index.json
 ```
 
 然后在市场里搜索 `dsh-qq-whale` / `dsh-qq-vault` 安装并启用。
@@ -73,8 +73,8 @@ https://github.com/OWNER/REPO/raw/main/market/index.json
 ### 路径 B：GitHub 直装（不经过市场）
 
 ```bash
-dsh plugin --profile web add 'git+https://github.com/OWNER/REPO.git#<40位commit>&path:/packages/dsh-qq-whale'
-dsh plugin --profile web add 'git+https://github.com/OWNER/REPO.git#<40位commit>&path:/packages/dsh-qq-vault'
+dsh plugin --profile web add 'git+https://cnb.cool/civer/dsh-qq-instruction.git#<40位commit>&path:/packages/dsh-qq-whale'
+dsh plugin --profile web add 'git+https://cnb.cool/civer/dsh-qq-instruction.git#<40位commit>&path:/packages/dsh-qq-vault'
 ```
 
 `#<commit>` 必须是完整 40 位小写 hex；`&path:/…` 是单仓库多子包的写法，不能省。

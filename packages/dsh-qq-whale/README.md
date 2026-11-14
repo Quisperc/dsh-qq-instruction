@@ -28,7 +28,7 @@
 ### 路径 A：插件市场（推荐，能收到更新）
 
 1. 设置 → 插件 → **发现** → 右上角索引菜单 → 「管理索引来源」→ 添加索引 URL：
-   `https://github.com/OWNER/REPO/raw/main/market/index.json`
+   `https://cnb.cool/civer/dsh-qq-instruction/raw/main/market/index.json`
    （这个 JSON 由本仓库自己托管，怎么生成/托管见 [`market/README.md`](../../market/README.md)）
 2. 搜索 `dsh-qq-whale` → 安装 → 回到插件页**启用**。
 3. 设置页配 `mode` / `allowTools`；再去 `dsh-qq-bot` 填 `qq`（见上面「第 3 步」）。
@@ -38,7 +38,7 @@
 ### 路径 B：GitHub 直装（不经过市场）
 
 ```bash
-dsh plugin --profile web add 'git+https://github.com/OWNER/REPO.git#<40位commit>&path:/packages/dsh-qq-whale'
+dsh plugin --profile web add 'git+https://cnb.cool/civer/dsh-qq-instruction.git#<40位commit>&path:/packages/dsh-qq-whale'
 ```
 
 - `#<commit>` 必须是**完整 40 位小写 hex**（短 hash 不认）；

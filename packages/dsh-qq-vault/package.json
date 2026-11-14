@@ -83,9 +83,9 @@
     "url": "git+https://cnb.cool/civer/dsh-qq-instruction.git",
     "directory": "packages/dsh-qq-vault"
   },
-  "homepage": "https://cnb.cool/civer/dsh-qq-instruction/-/tree/main/packages/dsh-qq-vault",
+  "homepage": "https://cnb.cool/civer/dsh-qq-instruction/tree/main/packages/dsh-qq-vault",
   "bugs": {
-    "url": "https://cnb.cool/civer/dsh-qq-instruction/-/issues"
+    "url": "https://cnb.cool/civer/dsh-qq-instruction/issues"
   },
   "license": "MIT"
 }

@@ -44,7 +44,7 @@ preset 锁与工作区账本一起搬，风险高于收益。UI 上渲染为**�
 ### 路径 A：插件市场（推荐，能收到更新）
 
 1. 设置 → 插件 → **发现** → 右上角索引菜单 → 「管理索引来源」→ 添加索引 URL：
-   `https://github.com/OWNER/REPO/raw/main/market/index.json`
+   `https://cnb.cool/civer/dsh-qq-instruction/raw/main/market/index.json`
    （索引由本仓库自己托管，生成与托管方式见 [`market/README.md`](../../market/README.md)）
 2. 搜索 `dsh-qq-vault` → 安装 → 回到插件页**启用**。
 3. 侧栏插件 → dsh-qq-vault → 配置区，勾选数据项 → 导出。
@@ -52,7 +52,7 @@ preset 锁与工作区账本一起搬，风险高于收益。UI 上渲染为**�
 ### 路径 B：GitHub 直装（不经过市场）
 
 ```bash
-dsh plugin --profile web add 'git+https://github.com/OWNER/REPO.git#<40位commit>&path:/packages/dsh-qq-vault'
+dsh plugin --profile web add 'git+https://cnb.cool/civer/dsh-qq-instruction.git#<40位commit>&path:/packages/dsh-qq-vault'
 ```
 
 `#<commit>` 要完整 40 位小写 hex，`&path:/packages/dsh-qq-vault` 不能省。
