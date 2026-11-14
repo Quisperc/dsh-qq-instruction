@@ -59,6 +59,13 @@ function toolsOf(agent) {
 /**
  * 装执行期拦截：名单外的工具调用直接被拒，并回一句可读的中文。
  *
+ * **必须保留 disposer**：官方 `tools.guard()` 的返回值就是「移除该 guard」的 effect disposer
+ *   （dsh-tools `guard(): @returns the effect disposer that removes this guard`）。
+ *   本插件早期版本把它丢了，结果守卫只能随 agent 一起死——改逻辑后老 agent 仍按旧规则拒绝，
+ *   只能重启 DSH 或删会话才能换掉（2026-11-15 事故）。
+ *   另注意：该 effect 绑的是 **agent 的 ctx**，所以插件卸载不会回收它、agent 释放才回收；
+ *   这不是泄漏，但意味着「agent 比代码活得久」，改行为必须考虑存量 agent。
+ *
  * **名单每次调用现读**，不在安装时快照：QQ 会话的 agent 是长期存活的，
  * 若把名单 capture 进闭包，改配置（新增/删除白名单项）后老会话永远用旧名单——
  * 2026-11-15 的「qq_voice 不可用」就是这么来的（agent 建于加白名单之前）。

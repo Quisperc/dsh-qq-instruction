@@ -4,6 +4,16 @@
 > 每次改动都要记一笔——**半年后你会想知道当时为什么这么改**。
 > 版本号是**双轨**的（项目本体 + 插件包），规则见 CONTRIBUTING §6。
 
+## [1.36.0] - 2026-11-15（钩子生命周期经验落地 + TTS 真机验证成功）
+
+### Verified — qq_voice 修复后真机成功
+- 重启 DSH 重建 agent 后，模型自行调用 `qq_voice` 并**自己传入** `rate:0.85` + `style`：`{"ok":true,"sent":true,"bytes":211244,"seconds":6.6,"seedSource":"random","voiceSource":"default"}`
+- 证明「参数交模型自决」整条链路可用；此前的失败源于存量 agent 携带旧的守卫快照
+
+### Added
+- `agent-guard.js` 注释：官方 `tools.guard()` 的返回值是**移除该 guard 的 effect disposer**，丢弃它会导致老 agent 无法换规则
+- `CHANGE-PLAYBOOK` 新增「通用坑：装到长生命周期对象上的钩子」——症状 / 根因 / 做法三列，含自检问句「这个 agent 会比我这版代码活得久吗？」
+
 ## [1.35.0] - 2026-11-15（修 qq_voice 被白名单拦：名单改为现读）
 
 ### Fixed — dsh-qq-whale v0.14.1
