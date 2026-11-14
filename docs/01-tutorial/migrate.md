@@ -149,7 +149,7 @@ for (const n of ["dsh-qq-whale", "dsh-qq-vault"])
 | 原因 | 说明 |
 |---|---|
 | **私有仓库需要鉴权** | `dsh plugin add` 走 npm registry；两个自有包都没发 npm |
-| **要跟真源同步** | 仓库是唯一真源（`cnb.cool/civer/dsh-qq-instruction`）。软链 = 拉取即生效 |
+| **要跟真源同步** | 仓库是唯一真源（`github.com/Quisperc/dsh-qq-instruction`，公开）。软链 = 拉取即生效 |
 | **改代码即生效** | 软链指向源码，改 `lib/*.js` 后 `set_bundle` 关→开就重载 |
 | **两处登记缺一不可** | 只在 `node_modules` 里放文件不算装：`dependencies` 决定插件页是否列出，`dsh.profile.bundles` 决定是否挂载 |
 

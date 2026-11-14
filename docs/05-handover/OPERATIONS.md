@@ -25,7 +25,7 @@
 | QQ 上游 | NapCat 正向 WS `wss://qapi.civer.cn`，selfId `2174357664` | `qqbot` 工具 action=status |
 | QQ 工作区 | `/data/dsh/home/Documents/deepseek-harness/QQ_msg` | `ls` |
 | 会话日志 | `/data/dsh/sessions/--data-dsh-home-Documents-deepseek-harness-QQ_msg--/` | `ls -t` |
-| 文档真源 | `cnb.cool/civer/dsh-qq-instruction`（私有，需 git 令牌） | — |
+| 文档真源 | `github.com/Quisperc/dsh-qq-instruction`（公开，clone 无需令牌） | — |
 | 本机工作副本 | `/data/dsh/home/QQBotV2/dsh-qq-instruction` | `git -C … log -1` |
 
 > 端口/路径只写上面这些。没有写出来的，就是没确认过——**不要猜**。

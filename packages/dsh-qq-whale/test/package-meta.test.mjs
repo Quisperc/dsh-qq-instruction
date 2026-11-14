@@ -53,7 +53,8 @@ test('files 清单覆盖所有运行期需要的文件（漏了就会发布出�
 test('catalog 展示信息齐备（中英摘要 + 能力标签）', () => {
   const catalog = pkg.dsh.catalog;
   assert.ok(catalog, '缺少 dsh.catalog');
-  assert.equal(catalog.category, 'preset');
+  // 分类面向市场浏览：两个 QQBot 插件统一为 qq，避免被分到两处
+  assert.equal(catalog.category, 'qq');
   assert.ok(typeof catalog.summary.zh === 'string' && catalog.summary.zh.length > 0);
   assert.ok(typeof catalog.summary.en === 'string' && catalog.summary.en.length > 0);
   assert.ok(Array.isArray(catalog.capabilities) && catalog.capabilities.includes('preset'));

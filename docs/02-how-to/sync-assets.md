@@ -10,7 +10,7 @@
 
 | 侧 | 位置 | 角色 | 特点 |
 |---|---|---|---|
-| **Git（真源）** | `cnb.cool/civer/dsh-qq-instruction` | **唯一权威** | 有完整历史、可回滚、可开 PR 评审 |
+| **Git（真源）** | `github.com/Quisperc/dsh-qq-instruction`（公开） | **唯一权威** | 有完整历史、可回滚、可开 PR 评审 |
 | 本地 / 服务器 | `/workspace/qqbot/`（或你 clone 的任何位置） | 工作区 | 能跑脚本、能实测、改完直接验证 |
 | 项目资产（网盘） | 项目资产根目录 `qqbot/` | 只读副本 | 成员可见、可在线预览、方便下载 |
 

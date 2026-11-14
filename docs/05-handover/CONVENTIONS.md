@@ -1,6 +1,6 @@
 # 开发规范（CONVENTIONS）
 
-> 适用：`cnb.cool/civer/dsh-qq-instruction` 及其本机工作副本 · 插件范本 `packages/dsh-qq-whale`（v0.8.0）
+> 适用：`github.com/Quisperc/dsh-qq-instruction`（公开）及其本机工作副本 · 插件范本 `packages/dsh-qq-whale`（v0.14.0）
 > 最后核对：2026-11-14 · 与仓库根 `CONTRIBUTING.md` 冲突时，以仓库为准并在本节记录差异
 > 读者：下一个改这个仓库的 Agent。**改任何东西之前先读第 1、2 节。**
 
@@ -8,21 +8,22 @@
 
 ## 1. 真源与同步流程
 
-**唯一真源**：`cnb.cool/civer/dsh-qq-instruction`（私有，需 git 令牌）。
+**唯一真源**：`github.com/Quisperc/dsh-qq-instruction`（**已公开，clone 不需要令牌**）。
 **本机工作副本**：`/data/dsh/home/QQBotV2/dsh-qq-instruction`（软链安装的插件就指向这里，改文件 = 改线上）。
 
 ### 1.1 标准顺序（每次改动都走这条）
 
 | # | 动作 | 命令 / 说明 |
 |---|---|---|
-| 1 | 拉取 | `git -C <工作副本> fetch --depth 20 "https://cnb:<token>@cnb.cool/civer/dsh-qq-instruction.git" main` |
+| 1 | 拉取 | `git -C <工作副本> fetch origin main` |
 | 2 | 读 diff | `git diff --stat <旧HEAD> FETCH_HEAD`，再 `git diff <旧HEAD> FETCH_HEAD -- <关键文件>` |
-| 3 | 对齐 | `git reset --hard FETCH_HEAD`（**先做第 2 节检查**），然后 `git remote set-url origin https://cnb.cool/civer/dsh-qq-instruction.git` 去掉带令牌的 URL |
+| 3 | 对齐 | `git reset --hard FETCH_HEAD`（**先做第 2 节检查**） |
 | 4 | 改 | 在工作副本里改；改插件包 = 改线上（软链自动跟随） |
 | 5 | 测试 | 见第 4 节，必须跑 |
 | 6 | 提交 | 本地 `git commit`（本机无全局身份，见 2.3） |
 | 7 | 生效 | `plugin_manager set_bundle` 关→开；需要冷启动验证才重启容器 |
 | 8 | 验证 | `cd /tmp && dsh --profile web --dump-config > /dev/null; echo $?` → `0` |
+| 9 | 推送 | `git push origin main`（公开仓库，无需凭据；历史若被重写过需 `--force-with-lease`） |
 
 ### 1.2 分支与提交
 
