@@ -1,0 +1,129 @@
+{
+  "format": 1,
+  "title": {
+    "en": "QQBot plugins",
+    "zh": "QQBot 插件"
+  },
+  "description": {
+    "en": "Plugins for running a QQ (OneBot/NapCat) bot on DeepSeek Harness: a restricted agent preset, and settings-page backup.",
+    "zh": "在 DeepSeek Harness 上跑 QQ（OneBot/NapCat）机器人用的插件：受限 agent preset，以及设置页备份。"
+  },
+  "metadata": {
+    "categories": {
+      "preset": {
+        "title": {
+          "en": "Agent preset",
+          "zh": "Agent 预设"
+        }
+      },
+      "qq": {
+        "title": {
+          "en": "QQ / OneBot",
+          "zh": "QQ / OneBot"
+        }
+      }
+    },
+    "labels": {},
+    "sortKeys": {}
+  },
+  "plugins": [
+    {
+      "name": "dsh-qq-vault",
+      "title": {
+        "en": "QQBot backup",
+        "zh": "QQBot 备份"
+      },
+      "description": {
+        "en": "Export and import the QQ bot's config, persona and memory from the settings page: preview first, write only behind a one-time code.",
+        "zh": "在设置页导出/导入 QQBot 的配置、人设与记忆：默认只预览，写入需一次性确认码。"
+      },
+      "icon": "../packages/dsh-qq-vault/icon.svg",
+      "author": "civer",
+      "homepage": "https://github.com/OWNER/REPO",
+      "repository": {
+        "url": "https://github.com/OWNER/REPO",
+        "directory": "packages/dsh-qq-vault"
+      },
+      "metadata": {
+        "category": "qq",
+        "keywords": [
+          "dsh",
+          "deepseek-harness",
+          "qq",
+          "qqbot",
+          "backup",
+          "migrate",
+          "export",
+          "import",
+          "cordis",
+          "plugin",
+          "onebot",
+          "napcat",
+          "dsh-plugin"
+        ]
+      },
+      "versions": [
+        {
+          "version": "0.4.0",
+          "publishTimestamp": 1794645449,
+          "source": {
+            "type": "git",
+            "url": "https://github.com/OWNER/REPO",
+            "commit": "1f4ab982a4ac33c318fee34435a7fd495378765f",
+            "path": "packages/dsh-qq-vault"
+          },
+          "engines": {
+            "dsh": ">=0.2.0-rc.2 <0.3.0"
+          }
+        }
+      ]
+    },
+    {
+      "name": "dsh-qq-whale",
+      "title": {
+        "en": "QQ chat preset (preset-qq)",
+        "zh": "QQ 群聊受限预设（preset-qq）"
+      },
+      "description": {
+        "en": "Adds a restricted Agent preset (id: qq) for QQ chats, and lets you tune the tool surface from the settings page.",
+        "zh": "装上即多一张 preset-qq；设置页可热调收窄强度与工具白名单。"
+      },
+      "icon": "../packages/dsh-qq-whale/icon.svg",
+      "author": "civer",
+      "homepage": "https://github.com/OWNER/REPO",
+      "repository": {
+        "url": "https://github.com/OWNER/REPO",
+        "directory": "packages/dsh-qq-whale"
+      },
+      "metadata": {
+        "category": "preset",
+        "keywords": [
+          "dsh",
+          "qq",
+          "preset",
+          "tool-guard",
+          "dsh-plugin",
+          "onebot",
+          "napcat",
+          "agent-preset",
+          "tool-surface"
+        ]
+      },
+      "versions": [
+        {
+          "version": "0.14.0",
+          "publishTimestamp": 1794645449,
+          "source": {
+            "type": "git",
+            "url": "https://github.com/OWNER/REPO",
+            "commit": "1f4ab982a4ac33c318fee34435a7fd495378765f",
+            "path": "packages/dsh-qq-whale"
+          },
+          "engines": {
+            "dsh": ">=0.2.0-rc.2 <0.3.0"
+          }
+        }
+      ]
+    }
+  ]
+}
