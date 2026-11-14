@@ -4,6 +4,18 @@
 > 每次改动都要记一笔——**半年后你会想知道当时为什么这么改**。
 > 版本号是**双轨**的（项目本体 + 插件包），规则见 CONTRIBUTING §6。
 
+## [1.31.0] - 2026-11-15（ADR-013：语音路线与协议评估）
+
+### Added
+- `docs/04-explanation/decisions/ADR-013-voice-tts-stt-route.md`：按「先规范后功能」补齐语音决策记录
+  - F1 入站丢音频（CQ 串与段数组两条路径的实证行号）
+  - F2 出站支持 record 但**无入口**（6 条路由、无 provide、工具只有 text/image）
+  - F3 社区插件错位：腾讯官方 `dsh-qqbot`（AppID 协议，有 `sendVoice`）、`dsh-xiaomi-tts`（联动的是官方协议工具）、`dsh-plugin-tts`（浏览器朗读）、`dsh-voice-mode`（麦克风 ASR）
+  - D1 自建只发不收的 WS；D2 STT 等上游；D3 暂不切协议（需用户拍板）
+
+### Notes
+- 计费阻断记录：`maas.qianwenaiapi.com` 全模型 403 Unpurchased；DashScope `qwen3-tts-flash` 由 200 转 400 Arrearage
+
 ## [1.30.0] - 2026-11-15（TTS 真机打通）
 
 ### Fixed（真机踩出来的）

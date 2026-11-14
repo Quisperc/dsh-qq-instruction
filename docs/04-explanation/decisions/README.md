@@ -17,6 +17,7 @@
 | [ADR-010](./ADR-010-restricted-preset-for-qq.md) | QQ 场景用受限 preset，从标准 22 行**裁剪**而非照抄 | ✅ 有效（`preset-qq` 即此产物） |
 | [ADR-011](./ADR-011-host-provide-and-activation-tests.md) | host 半必须 `ctx.provide` 注册服务；「能激活」要进测试 | ✅ 有效 |
 | [ADR-012](./ADR-012-whale-preset-only.md) | whale 收窄为「只提供 preset」，删掉人格配置面/设置页/导出 | ⚠️ **被 v0.11+ 扩展**：现在除了 preset，还负责**工具收窄**（guard/restrict）与**设置页配置**（现为两项：`mode` / `allowTools`）；「不碰别人配置」「不改人格」这两条边界仍有效 |
+| [ADR-013](./ADR-013-voice-tts-stt-route.md) | 语音（TTS/STT）的实现路线与协议评估：qq-bot 入站丢音频、出站无入口；社区插件均错位（官方协议/浏览器朗读）；TTS 自建只发不收的 WS，STT 等上游 | ✅ **有效** |
 
 ---
 
