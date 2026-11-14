@@ -1,0 +1,45 @@
+# 密钥与临时文件 —— 绝不入库
+.env
+.env.*
+*.key
+*.pem
+*.token
+secrets.yml
+profiles/*/cordis.patch.yml
+!config/cordis.patch.yml
+
+# 迁移/备份产物 —— 内含 NapCat token、QQ 号、人设与记忆，绝不能进仓库
+*.tar.gz
+*.tgz
+qqbot-vault-*.tar.gz
+qqbot-migrate-*.tar.gz
+
+# 依赖（宿主 profile 提供；子包里的 node_modules 多为本机测试软链）
+node_modules/
+packages/*/node_modules/
+__pycache__/
+*.pyc
+.venv/
+
+# 记忆与会话数据（含他人信息，属于隐私）
+soul-md/
+QQ_msg/
+memory/
+
+# 产物
+*.log
+*.tmp
+samples/tmp/
+
+# 编辑器 / 系统
+.DS_Store
+.idea
+.vscode
+*.swp
+
+# 真实配置（含 NapCat token / QQ 号）绝不进仓库；模板见 config/cordis.patch.example.yml
+config/cordis.patch.yml
+
+# 市场索引：只提交 market/index.json（由 scripts/make-market-index.mjs --write 生成）；
+# 本地试验/临时改过的变体（index.local.json 等）不要入库，免得被当成正式索引托管。
+market/index.*.json

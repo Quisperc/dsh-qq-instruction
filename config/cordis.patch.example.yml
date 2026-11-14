@@ -1,0 +1,116 @@
+# ============================================================
+# dsh-qq-bot 最终配置（已按你的环境填好，并实测验证）
+#
+# 安装位置：$DSH_HOME/profiles/web/cordis.patch.yml
+# 字段来源：插件 v0.12.8 真实 schema
+#
+# ✅ 已实测通过（2026-10-31）：
+#    wss://your.napcat.host  → 握手成功 / 鉴权通过 / self_id=BOT_QQ
+#    群 GROUP_ID「Botest」在群列表内（7 名成员）
+#
+# ⚠️ 安装后请执行：chmod 600 本文件（里面含 token）
+# ============================================================
+
+- id: dsh-qq-bot
+  name: '@sputnikzaychik/dsh-qq-bot'
+  config:
+
+    # ---------- 1. 连接（已验证） ----------
+    protocol: onebot11
+    mode: forward                        # NapCat 是服务端 → 正向 WS
+    onebot:
+      wsUrl: 'wss://your.napcat.host'       # ✅ 实测可连，鉴权通过
+      httpUrl: ''                        # 留空 = 发送也走同一条 WS（单连接双工）
+      accessToken: 'YOUR_NAPCAT_TOKEN'      # ✅ 实测有效
+                                         # 建议后续换成 openssl rand -hex 32 的强随机串
+
+    # ---------- 2. 人格 ----------
+    persona:
+      enabled: true
+      name: '大肥鱼'
+      text: ''                           # ← 把 persona/whale.md 全文粘进来
+                                         #   每个新会话第一轮自动附一次
+
+    # ---------- 3. 准入 ----------
+    group:
+      enabled: true
+      requireAt: true                    # 先开着：群里必须 @ 才回
+      allow: ['GROUP_ID']               # 只在你指定的群生效
+    private:
+      enabled: true
+      allow: []
+    auth:
+      owners: ['YOUR_QQ']              # 你的 QQ 号：全权限 + 永久授权
+      superAdmins: []
+      guestDshTools: false               # 访客禁用 DSH 内部工具（别开）
+      guestToolAllow: ['qq_history']     # 访客可用工具的例外
+
+    # ---------- 4. 群管理（先演练） ----------
+    admin:
+      enabled: true
+      manageGroups: ['GROUP_ID']
+      requireGroupAdmin: true
+      prefix: "/"
+      dryRun: true                       # ← 先 true；确认行为后再改 false
+
+    # ---------- 5. 回复 ----------
+    reply:
+      maxChars: 1200
+      interim: true                      # 中间发言
+    perChatSession: true                 # 每个 QQ 会话一条 DSH 会话
+    session:
+      fixedName: true                    # 会话名固定为 群聊_GROUP_ID / 私聊_<QQ号>
+
+    # ---------- 5.5 Agent 预设（只影响新会话） ----------
+    # 用 dsh-qq-whale 装进来的 preset-qq（受限能力集：无 shell / 联网 / 子代理）。
+    # ⚠️ 填之前必须确认组合树里真有这条 preset，否则新会话会直接失败：
+    #   dsh plugin --profile web list                  → dsh-qq-whale 的 phase 是 active
+    #   dsh --profile web --dump-config | grep preset-qq
+    # 确认不了就先留空（回落 agentPreset 的默认 standard）。
+    agentPresetCustom: 'qq'
+
+    # ---------- 6. 视觉识图 ----------
+    vision:
+      enabled: true
+      provider: ''
+      model: ''                          # 需要独立视觉模型时填 qwen3-vl-plus
+      maxImages: 3
+    history:
+      scopeMessages: 5
+      imageLimit: 3
+
+    # ---------- 7. 生图 ----------
+    # DashScope 的 OpenAI 兼容 /images/generations 实测返回空，
+    # 所以这里先关；改用独立工具插件走 multimodal-generation（见 docs/04）
+    imageGen:
+      enabled: false
+      baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1'
+      apiKeyEnv: 'DASHSCOPE_API_KEY'
+      model: 'qwen-image-3.0'
+      size: '1024x1024'
+      timeoutMs: 180000
+
+    # ---------- 8. 主动发言（第 6 天再开） ----------
+    proactive:
+      enabled: false                     # ← 默认关。节奏调准了再开
+      groups: []                         # 要开就填 ['GROUP_ID']
+      intervalMinutes: 60                # 多久看一次群（别实时监听）
+      windowMessages: 30
+      minNewMessages: 6                  # 群里至少多了几条才考虑开口
+      quietHours: ["23:00-08:00"]        # 静默时段
+      maxPerHour: 2
+      maxPerDay: 8
+      minGapMinutes: 15
+      eventGuard: true
+      staleMinutes: 15
+      topicCooldownMinutes: 120
+      maxChars: 120                      # 主动发言要短
+      dryRun: true                       # ← 先演练：只记日志不发送
+      interests: ''
+      persona: ''
+
+    # ---------- 9. 其它 ----------
+    logAdapterFrames: false              # 排障时临时开 true
+    restart:
+      baseMs: 1000
+      maxMs: 30000
