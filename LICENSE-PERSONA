@@ -27,6 +27,10 @@ International）。协议全文：<https://creativecommons.org/licenses/by-nc-sa
 
 ## 3. 与 MIT 的边界
 
+根目录 [LICENSE](./LICENSE) 是**纯 MIT 原文**（只覆盖代码、脚本、配置、文档）。
+两者关系如下：
+
+
 - 复制、修改、分发 `packages/`、`scripts/`、`docs/`、`config/`、`market/` 下的内容：**只需遵守 MIT**。
 - 复制、修改、分发 `persona/`（或配置里的人格文本）：**必须遵守本文件的 CC BY-NC-SA 4.0**。
 - 两者打包在一起分发时，人格部分仍受本文件约束，不因整体以 MIT 发布而改变。
