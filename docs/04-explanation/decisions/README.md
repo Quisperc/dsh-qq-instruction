@@ -6,7 +6,7 @@
 | 编号 | 一句话 | 状态 |
 |---|---|---|
 | [ADR-001](./ADR-001-adopt-dsh-qq-bot.md) | 采用社区插件 `dsh-qq-bot` 接 OneBot，不自研桥接层 | ✅ 有效（现行架构基石） |
-| [ADR-002](./ADR-002-tts-realtime-websocket.md) | TTS 走实时 WebSocket，不走 HTTP 接口 | 📖 有效但**未实施**：qq-bot v0.12.8 无 TTS 实现，本文是选型结论 |
+| [ADR-002](./ADR-002-tts-realtime-websocket.md) | TTS 走实时 WebSocket，不走 HTTP 接口 | 📖 有效但**未实施**：qq-bot v0.14.0 无 TTS 实现，本文是选型结论 |
 | [ADR-003](./ADR-003-whale-plugin.md) | 把人格/配置做成独立插件，而不是继续堆 YAML | ⚠️ **部分被修订**：方向成立，但「DSH 会自动渲染表单因此不必写 client 半」被 ADR-004 证伪 |
 | [ADR-004](./ADR-004-client-half-required.md) | 插件配置区必须由 client 半注入 slot `plugins.bundle.config` | ✅ 有效（2026-11-14 真机再次验证） |
 | [ADR-005](./ADR-005-soul-md-evaluation.md) | 不采用 `dsh-soul-md`，记忆改用 `meow-memory` | ✅ 有效（现行记忆体系） |

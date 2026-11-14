@@ -69,15 +69,16 @@ QQ 客户端 → **NapCat**（协议翻译 + 门卫）→ **dsh-qq-bot**（接�
 |---|---|---|---|
 | **QQ 客户端** | 腾讯 | 你自己的手机/电脑 | 消息发不出去；与机器人无关 |
 | **NapCat** | 第三方开源（社区） | **机器外部**，地址 `wss://qapi.civer.cn`，登录的 Bot QQ 是 `2174357664` | 机器人完全不说话；`qqbot status` 会显示未连接 |
-| **dsh-qq-bot** | 第三方社区插件（作者 sputnikzaychik），版本 **v0.12.8** | `/data/dsh/profiles/web/node_modules/@sputnikzaychik/dsh-qq-bot` | 连上了但永远不回；设置页的「QQ 机器人」打不开 |
+| **dsh-qq-bot** | 第三方社区插件（作者 sputnikzaychik），版本 **v0.14.0** | `/data/dsh/profiles/web/node_modules/@sputnikzaychik/dsh-qq-bot` | 连上了但永远不回；设置页的「QQ 机器人」打不开 |
 | **DSH 本体** | DeepSeek 官方，版本 **0.2.2-rc.3** | `/usr/local/lib/node_modules/@deepseek-ai/dsh` | 整个网页打不开（不是 QQ 的问题，是宿主没了） |
 | **dsh-qq-whale** | 本仓库自己写的，版本 **v0.14.0** | 源码 `/data/dsh/home/QQBotV2/dsh-qq-instruction/packages/dsh-qq-whale`，通过软链接进 profile | 新会话建不起来 → 机器人对每条消息都回「内部错误」 |
+| **dsh-qq-vault** | 本仓库自己写的，版本 **v0.5.0** | 同仓库 `packages/dsh-qq-vault`，软链进 profile | 只是设置页少了「QQBot 备份」卡片，**QQ 主链路不受影响** |
 | **模型 provider** | leaflow（第三方云服务） | 不在这台机器上；模型 `deepseek-v4.1-flash-1017` | 有「正在输入」但没回复；日志里出现模型调用失败 |
 
 两个补充说明：
 
 - **插件（plugin）** 是什么？可以理解成「给 DSH 装的一块功能电路板」。装上不等于通电，还要被写进配置清单（见第 4 节误解 2）。
-- **谁是「第三方」**？`dsh-qq-bot` 是社区作者写的、通过 npm 下载的；`dsh-qq-whale` 是我们自己仓库里的，改它要改源码。
+- **谁是「第三方」**？`dsh-qq-bot` 是社区作者写的、通过 npm 下载的；`dsh-qq-whale` 与 `dsh-qq-vault` 是我们自己仓库里的，改它们要改源码。
 
 ---
 

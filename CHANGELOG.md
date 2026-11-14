@@ -4,6 +4,26 @@
 > 每次改动都要记一笔——**半年后你会想知道当时为什么这么改**。
 > 版本号是**双轨**的（项目本体 + 插件包），规则见 CONTRIBUTING §6。
 
+## [1.24.0] - 2026-11-14（仓库迁到公开 GitHub · 文档对齐）
+
+> 仓库从私有 CNB 迁到**公开 GitHub**，插件索引上 GitHub Pages；同时把文档里所有过时的地址与版本对齐到实况。
+
+### Changed — 仓库与发布
+- 真源：`cnb.cool/civer/dsh-qq-instruction`（私有）→ **`github.com/Quisperc/dsh-qq-instruction`（公开，clone 无需令牌）**
+- 插件市场索引：`https://quisperc.github.io/dsh-qq-instruction/market/index.json`（GitHub Pages，`main` 分支根目录）
+- `docs/05-handover/OPERATIONS.md` 新增 **§11 发布与上架**：地址表、发版三步（**先提交包再生成索引**）、改仓库地址、上架官方目录的材料
+- `market/README.md` 从「以后要做的」改成现状：索引 URL、Pages 怎么来的、发版顺序、**索引保留历史版本**
+
+### Changed — 文档事实对齐
+- 版本基线统一：`dsh-qq-bot 0.14.0` · `whale 0.14.0` · `vault 0.5.0`（README / docs/README / OPERATIONS / plugin-inventory / tool-surface / tts / config-schema）
+- **忆图结论改写**：qq-bot 0.14.0 起 `vision.provider`/`vision.model` 都留空时，图片作为**附件直接进会话**；`read_image` 不再是识图主路径（`tool-surface.md` §5 重写、OPERATIONS 两处更正）
+- **vault 语义对齐 v0.5.0**：`migrate.md` 的导出/导入章节从「4 个粗粒度勾选 + 整段替换」改为**逐配置项**（`GET /items` 动态发现、`items/` 目录结构、逐项预览与多选、只有变更行可勾）
+- 密钥处置章节（`sync-assets.md` §4）从「私有仓库可接受」改为「**已公开**，真实配置不在库内」，并给出 4 步自查
+
+### Fixed
+- `README.md` 顶部安全提示：旧文案说「仓库里有真实 token、私有可接受」——已改为「不含任何凭据，模板在 `config/cordis.patch.example.yml`」
+- 安装三条路径全部换成 GitHub 地址（市场索引 / `git+…&path:/packages/…` 直装 / 软链开发）
+
 ## [1.23.0] - 2026-11-14（vault v0.5.0 逐项备份 · 适配 qq-bot 0.14.0）
 
 > 两件事：备份不再"整段替换"（改成逐配置项对比 + 多选）；跟随 qq-bot 0.14.0 的识图变化删掉过时规则。

@@ -44,7 +44,7 @@ preset 锁与工作区账本一起搬，风险高于收益。UI 上渲染为**�
 ### 路径 A：插件市场（推荐，能收到更新）
 
 1. 设置 → 插件 → **发现** → 右上角索引菜单 → 「管理索引来源」→ 添加索引 URL：
-   `https://cnb.cool/civer/dsh-qq-instruction/raw/main/market/index.json`
+   `https://quisperc.github.io/dsh-qq-instruction/market/index.json`
    （索引由本仓库自己托管，生成与托管方式见 [`market/README.md`](../../market/README.md)）
 2. 搜索 `dsh-qq-vault` → 安装 → 回到插件页**启用**。
 3. 侧栏插件 → dsh-qq-vault → 配置区，勾选数据项 → 导出。
@@ -52,7 +52,7 @@ preset 锁与工作区账本一起搬，风险高于收益。UI 上渲染为**�
 ### 路径 B：GitHub 直装（不经过市场）
 
 ```bash
-dsh plugin --profile web add 'git+https://cnb.cool/civer/dsh-qq-instruction.git#<40位commit>&path:/packages/dsh-qq-vault'
+dsh plugin --profile web add 'git+https://github.com/Quisperc/dsh-qq-instruction.git#<40位commit>&path:/packages/dsh-qq-vault'
 ```
 
 `#<commit>` 要完整 40 位小写 hex，`&path:/packages/dsh-qq-vault` 不能省。
@@ -254,6 +254,13 @@ node --test test/*.mjs      # 86 项（80 通过 + 6 项 live 默认 skip）
 | `live.mjs` | 6（默认 skip） | 真机检查：capabilities 新字段、8 条路由、cleanup dry-run、export gzip、405、无 token 导入 |
 
 测试全程只碰 `/tmp` 下的合成目录，**没有读写任何真实配置或记忆库**。
+
+> **先决条件**：本包不锁依赖，运行时依赖由宿主 DSH 提供（`@deepseek-ai/*` 未发布到公开 npm）。
+> 在干净克隆里跑测试前，先在本目录建软链指向宿主依赖：
+> ```bash
+> ln -s /path/to/dsh/profiles/web/node_modules node_modules
+> ```
+> 直接 `npm install` 装不到 `@deepseek-ai/schemastery` 这类包，会报 `MODULE_NOT_FOUND`。
 
 真机自检（对运行中的服务）：
 

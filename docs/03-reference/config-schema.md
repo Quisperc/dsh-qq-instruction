@@ -1,4 +1,4 @@
-# 配置字段参考（插件 v0.12.8）
+# 配置字段参考（插件 v0.14.0）
 
 > 字段来源：插件包内 `docs/DEVELOPMENT.md` 的真实 schema，非推测。
 > **可直接用的版本**：[`../../config/cordis.patch.yml`](../../config/cordis.patch.yml)（已按真实环境填好）。

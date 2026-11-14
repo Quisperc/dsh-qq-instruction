@@ -11,7 +11,7 @@
 | 查字段、查参数、查结论 | `03-reference/` | ⚠️ 部分结论已被真机推翻，见标记 |
 | 想知道为什么这么设计 | `04-explanation/` | ✅（解释层，不含操作步骤） |
 
-**当前版本基线（2026-11-14）**：DSH `0.2.2-rc.3` · `@sputnikzaychik/dsh-qq-bot` `0.12.8` · `dsh-qq-whale` `0.14.0` · `dsh-qq-vault` `0.4.0`。
+**当前版本基线（2026-11-14）**：DSH `0.2.2-rc.3` · `@sputnikzaychik/dsh-qq-bot` `0.14.0` · `dsh-qq-whale` `0.14.0` · `dsh-qq-vault` `0.5.0`。
 读到与这行不符的版本号，以这行为准。
 
 ---
@@ -21,7 +21,7 @@
 | 文档 | 什么时候读 | 状态 |
 |---|---|---|
 | [`ARCHITECTURE.md`](./05-handover/ARCHITECTURE.md) | **纯小白先读这篇**：六个角色、一条消息的 10 步旅程、preset≠沙箱、人格两条通道、目录索引、ASCII 图 | ✅ 现行 |
-| [`OPERATIONS.md`](./05-handover/OPERATIONS.md) | 改配置 / 装插件 / 热重载 / 验证 / 回滚 / 故障速查 / 紧急静音 / 成本 / 能力线现状 / 平台限制 | ✅ **操作唯一真源** |
+| [`OPERATIONS.md`](./05-handover/OPERATIONS.md) | 改配置 / 装插件 / 热重载 / 验证 / 回滚 / 故障速查 / 紧急静音 / 成本 / 能力线现状 / 平台限制 / **发布与上架（§11）** | ✅ **操作唯一真源** |
 | [`CONVENTIONS.md`](./05-handover/CONVENTIONS.md) | 真源与同步流程、插件开发约定、测试规范、已知坑清单 | ✅ 现行 |
 | [`README.md`](./05-handover/README.md) | 三份文档的分工与阅读顺序 | ✅ 现行 |
 
@@ -49,11 +49,11 @@
 | 文档 | 查什么 | 状态 |
 |---|---|---|
 | [`tool-surface.md`](./03-reference/tool-surface.md) | **QQ 会话到底能用哪些工具**：23 项白名单、可见≠可执行、guard 与 restrict 分工、怎么改 | ✅ 新增（2026-11-14） |
-| [`config-schema.md`](./03-reference/config-schema.md) | `dsh-qq-bot` v0.12.8 的完整配置字段 | ✅ 有效（**没有** tts/stt 组，别找了） |
+| [`config-schema.md`](./03-reference/config-schema.md) | `dsh-qq-bot` v0.14.0 的完整配置字段 | ✅ 有效（**没有** tts/stt 组，别找了） |
 | [`preset-qq-contract.md`](./03-reference/preset-qq-contract.md) | `preset-qq` 每行能写什么（官方包核对版）、两条人格通道 | ✅ 有效（`persona.prefix` 文案 2026-11-14 已改，见文内注） |
 | [`plugin-inventory.md`](./03-reference/plugin-inventory.md) | 相关插件清单（含别装错的 `dsh-bigfish`） | ✅ 有效（whale 行 2026-11-14 已更新到 0.12） |
 | [`feature-matrix.md`](./03-reference/feature-matrix.md) | 需求能力 vs 原生/自研对照 | 📖 参考（结论性质，不随版本变） |
-| [`tts.md`](./03-reference/tts.md) | TTS 参数全景、语气池、标签白名单、钳制规则 | 📖 **未来规划参考**：qq-bot v0.12.8 **没有** TTS 实现，本文是选型与实测资料，不是当前能力 |
+| [`tts.md`](./03-reference/tts.md) | TTS 参数全景、语气池、标签白名单、钳制规则 | 📖 **未来规划参考**：qq-bot v0.14.0 **没有** TTS 实现，本文是选型与实测资料，不是当前能力 |
 | [`capability-report.md`](./03-reference/capability-report.md) | 2026-10-31/11-01 的 API 实测记录（哪些端点通、音色 ID、踩过的坑） | 🕰️ **部分过期**：识图结论已被推翻（见文内注）；生图/ASR 结论仍可参考 |
 
 ## 04-explanation —— 解释（为什么）
@@ -71,7 +71,8 @@
 
 | 目录 | 内容 |
 |---|---|
-| [`../packages/`](../packages/) | 自研插件：`dsh-qq-whale`（preset + 工具收窄 + 设置页）、`dsh-qq-vault`（设置页导出/导入） |
+| [`../packages/`](../packages/) | 自研插件：`dsh-qq-whale`（preset + 工具收窄 + 设置页）、`dsh-qq-vault`（设置页**逐项**备份/导入） |
+| [`../market/`](../market/) | 插件市场索引：`index.json`（format 1）+ 托管/发版手册。索引地址 `https://quisperc.github.io/dsh-qq-instruction/market/index.json` |
 | [`../scripts/`](../scripts/) | 2 个 Node 脚本：`install-whale`（装自有插件）、**`verify-live`**（真机 15 项自检）；3 个 Python 脚本：`check-conventions` / `check-links` / `scrub-secrets`（**本机无 python3，跑不了**） |
 | [`../persona/`](../persona/) | 人格卡真源 `whale.md`（大肥鱼） |
 | [`../config/`](../config/) | 配置模板与真源副本（**实际生效**的是 `$DSH_HOME/profiles/web/cordis.patch.yml`） |

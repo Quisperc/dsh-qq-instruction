@@ -1,6 +1,6 @@
 # 运维手册（OPERATIONS）
 
-> 适用环境：DSH `0.2.2-rc.3` · profile `web` · `@sputnikzaychik/dsh-qq-bot 0.12.8` + `dsh-qq-whale 0.14.0` + `dsh-qq-vault 0.4.0`
+> 适用环境：DSH `0.2.2-rc.3` · profile `web` · `@sputnikzaychik/dsh-qq-bot 0.14.0` + `dsh-qq-whale 0.14.0` + `dsh-qq-vault 0.5.0`
 > 最后核对：2026-11-14 · 每条结论都可用文中命令复验
 > 读者：下一个接手这台机器的 Agent / 运维同学。**先读完第 1 节再动手。**
 
@@ -273,11 +273,11 @@ cd /tmp && dsh --profile web --dump-config > /dev/null; echo $?      # 改之前
 | 杠杆 | 现状与做法 |
 |---|---|
 | 模型 | 走 `leaflow/deepseek-v4.1-flash-1017`；要换在 `llm-pi-ai` 的 providers 里加模型再切 |
-| 识图 | 走 agent 自己 `read_image`（按需），**不是**每张图都自动调一次视觉模型；这样比「描述注入」省一次调用 |
+| 识图 | qq-bot **0.14.0 原生附件**：`vision.provider`/`vision.model` 都留空 → 图片作为附件随消息进会话，会话模型直接看，**不再多调一次视觉模型**，也不需要 `read_image` 绕路 |
 | 主动发言 | 当前 `dryRun=true` 只演练；真开启会显著放大成本（一直在读群、一直在判断） |
 | 频率闸 | `maxPerHour: 2` / `maxPerDay: 8` / `minGapMinutes: 15`（`proactive` 分组） |
 | 预算闸 | 给 API Key 设月度上限（服务商控制台），这是唯一硬上限 |
-| TTS/STT | **尚未实现**（qq-bot v0.12.8 无 tts/stt 配置组），暂不产生语音成本 |
+| TTS/STT | **尚未实现**（qq-bot v0.14.0 无 tts/stt 配置组），暂不产生语音成本 |
 
 ### 8.3 常用指令（群里直接发）
 
@@ -296,7 +296,7 @@ cd /tmp && dsh --profile web --dump-config > /dev/null; echo $?      # 改之前
 | 收发/分段/引用、人格、准入、记忆 | ✅ 可用 | — |
 | 联网（`qq_websearch` / `qq_webfetch` / `web_search` / `web_fetch`） | ✅ 可用 | — |
 | 群历史、图片反搜 | ✅ 可用 | — |
-| **识图** | ✅ 可用（走 `read_image`） | 无；qq-bot 自带「描述注入」空返回，别依赖 |
+| **识图** | ✅ 可用（qq-bot 0.14.0 原生附件；两项留空即走这条路） | 若把 `vision.provider/model` 任填一项，会退回「先描述再并入」，反而多一次调用 |
 | **生图** | ❌ 不通 | 缺 key（`DASHSCOPE_API_KEY` 未注入）+ 端点不兼容（插件只拼 `<baseUrl>/images/generations`，DashScope 该路径 404） |
 | **TTS** | ❌ 未实现 | 需新写工具（100–200 行）+ 出站 record 段 + 音频需公网可访问 URL（NapCat 在远端读不到本地文件） |
 | **STT** | ❌ 未实现 | 需 `get_record` 取音频 → VAD → ASR → 注入；工作量大于 TTS |
@@ -334,3 +334,52 @@ dsh-qq-vault ──> 独立（读写 profile 配置、记忆库；不依赖 whal
 校验器只读 root `engines.dsh`，`dsh.compatibility` **不被读取**（`dsh-app-boot lib/index.js:1101-1155`）。
 `dsh-qq-bot` 的 `engines.dsh` 无上界 → 升到 0.3 不会被拦，但很可能坏（深用 `sessionController` / `tools.guard` / `settings.configure` / `webServer.register`）。
 升级前：备份 `cordis.patch.yml`。**当前没有活跃的 node_modules 补丁**（识图那个已撤销），所以升级 dsh-qq-bot 不会丢东西。
+
+---
+
+## 11. 发布与上架（2026-11-14 起）
+
+### 11.1 现在的地址
+
+| 项 | 值 |
+|---|---|
+| 仓库 | `https://github.com/Quisperc/dsh-qq-instruction`（**公开**，clone 不需要令牌） |
+| 插件市场索引 | `https://quisperc.github.io/dsh-qq-instruction/market/index.json` |
+| 索引托管 | GitHub Pages（`main` 分支 `/` 根目录，Pages 直接服务整个仓库） |
+| 已收录版本 | `dsh-qq-whale 0.14.0` · `dsh-qq-vault 0.5.0` |
+| 安装 spec 形状 | `git+https://github.com/Quisperc/dsh-qq-instruction.git#<commit>&path:/packages/<包名>` |
+
+> 历史说明：仓库原先托管在私有 CNB（`cnb.cool/civer/…`，需令牌克隆）。**现在已不再需要连 CNB**，
+> 文档与脚本里的地址都已换成 GitHub；若在旧记录里看到 CNB，那是迁移前的历史。
+
+### 11.2 发一个新版本（三步，顺序不能换）
+
+```bash
+# 1) 改代码 + 升版本号 + 写 CHANGELOG，然后提交并推送
+#    （索引里钉的是这一步的 commit，所以包必须先落地）
+git add -A && git commit -m "feat(whale): ..." && git push origin main
+
+# 2) 生成索引（校验不过会直接报错，不会写出坏索引）
+node scripts/make-market-index.mjs --repo https://github.com/Quisperc/dsh-qq-instruction --write
+
+# 3) 提交索引并推送，Pages 约 1 分钟后生效
+git add market/index.json && git commit -m "chore(market): 索引 <版本>" && git push origin main
+```
+
+**为什么不能倒过来**：索引里每个版本都钉死一个 commit。先生成索引再提交包，索引指向的那个 commit 里还没有新代码，用户装下来是旧版。
+
+**历史版本会保留**：生成器会读旧索引并把往期版本原样留着（同名版本以本次为准），所以发 0.15.0 之后 0.14.0 仍可安装——用户回滚时直接选旧版本。
+
+### 11.3 仓库地址要是变了
+
+```bash
+node scripts/set-repo.mjs --repo https://github.com/<owner>/<repo> --write   # 改 6 个文件里的地址
+node scripts/make-market-index.mjs --repo https://github.com/<owner>/<repo> --write
+```
+
+`set-repo` 只认占位符 `https://github.com/OWNER/REPO`；如果地址是从**别的真实地址**（例如旧 CNB 地址）迁过来的，它匹配不到，需要手改或先替换成占位符再跑。
+
+### 11.4 上架官方目录
+
+自托管索引只解决「自己/别人加索引就能装」，官方目录（DSH 自带市场源）需要另外提交。材料清单见
+[`market/README.md`](../../market/README.md) §5；其中「公开仓库」一项已满足。

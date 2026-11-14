@@ -31,29 +31,33 @@
 
 ## 1. 在旧机器上打包
 
-打开 **设置 → 插件 → QQBot 备份**，勾选要带走的数据（默认全不选，必须手点）：
+打开 **设置 → 插件 → QQBot 备份**。卡片会把可导出的东西**逐项列出**（按组：`dsh-qq-bot` 的每个一级配置块 / 人格源文件 / 记忆库），默认**全不选**，由你勾：
 
-| 勾选项 | 是否建议 | 说明 |
+| 建议勾 | 项 | 说明 |
 |---|---|---|
-| 配置（含 token） | ✅ | `dsh-qq-bot` 整段配置；**含 NapCat token 与 QQ 号**，包要当机密文件对待 |
-| 人格卡 | ✅ | 导出的是**生效值** `persona.text`，同时带一份 `persona/whale.md` 源文件副本 |
-| 记忆库 | ⬜ | 含群友隐私；用 `VACUUM INTO` 导出，不会丢 WAL 里已提交的数据 |
-| whale 配置 | ⬜ | 只有你手改过 `mode`/`allowTools` 才需要；不改就用包内默认值 |
+| ✅ | `onebot` | NapCat 地址与 token —— **含凭据，包要当机密文件对待** |
+| ✅ | `persona` | 人格的**生效值**（`config.persona.text`，约 4.5k 字） |
+| ✅ | `group` / `private` / `auth` | 准入策略：谁能触发、谁能私聊 |
+| ⬜ | `vision` / `reply` / `proactive` / `session` / … | 只有你手调过才需要；不勾就用包内默认值 |
+| ⬜ | `memory.db` | 记忆库，含群友隐私；用 `VACUUM INTO` 导出，不会丢 WAL 里已提交的数据 |
+| ⬜ | `persona.source` | 仓库里 `persona/whale.md` 的副本（仅供对照） |
 
-点「导出」→ 浏览器直接下载 `qqbot-vault-<时间戳>.tar.gz`。
+配置项是**动态发现**的：qq-bot 升级后新增的字段（例如 0.14.0 的 `reply.bubbleGapMinMs`、`sticker.*`）会自动出现在列表里，不用改插件。
 
-包里是：
+点「导出选中项（N 项）」→ 浏览器直接下载 `qqbot-vault-<时间戳>.tar.gz`。
+
+包里是（**按项**组织，不再是整段配置）：
 
 ```
-cordis-qq-bot.yml         ← dsh-qq-bot 配置段落原文（含 token 与人设卡）
-persona/persona.text      ← 人格的生效值（导入时写回配置）
-persona/whale.md          ← 人格真源副本（仅供对照）
-memory/memory.db          ← SQLite VACUUM INTO 快照（勾选记忆才有）
-manifest.json             ← DSH/插件版本、导出时间、每个文件的 sha256
+items/qqbot.onebot.yml        ← 每个勾选的配置块单独一个文件
+items/qqbot.persona.yml
+persona/persona.text          ← 人格生效值（勾了 persona 才有）
+memory/memory.db              ← SQLite VACUUM INTO 快照（勾了记忆才有）
+manifest.json                 ← DSH/插件版本、导出时间、**逐项** sha256
 ```
 
-**怎么知道成功了**：浏览器收到一个 `qqbot-vault-*.tar.gz`；
-`tar tzf qqbot-vault-*.tar.gz` 能看到上面这些条目（勾了哪项就有哪项）。
+**怎么知道成功了**：浏览器收到 `qqbot-vault-*.tar.gz`；
+`tar tzf qqbot-vault-*.tar.gz` 能列出你勾的那几项。
 
 > ⚠️ 包里**含 NapCat token 与 QQ 号**。只走私密通道（scp / 加密盘 / 密码管理器），
 > 不要放进 Git、网盘公开链接或聊天群。
@@ -166,17 +170,21 @@ for (const n of ["dsh-qq-whale", "dsh-qq-vault"])
 然后 **设置 → 插件 → QQBot 备份**：
 
 1. 在文件列表里选中该包，或直接填绝对路径；
-2. 点「预览」——会显示将覆盖哪些项、sha256 完整性校验结果、以及一个**一次性确认码**（5 分钟有效）；
-3. 确认无误后点「执行导入」（带上确认码）。
+2. 点「预览差异」——**逐项**列出每个配置项的动作（未变 / 将替换 / 将新增）、两侧字节数与可展开的前 200 字对比，附带 sha256 完整性校验结果，以及一个**一次性确认码**（5 分钟有效，绑定「包路径 + 你勾选的项」）；
+3. **勾选你真正想恢复的项**（只有变更行可勾，可「全选变更」），再点「应用选中项」。
 
 导入时插件会：
 
 1. 校验 `manifest.json` 与 **DSH 版本**（主次版本不一致会拒绝；确实要跨版本用强制导入，风险自负）；
 2. **备份**目标 `cordis.patch.yml` → `cordis.patch.yml.bak-vault-<时间戳>`；
-3. 把 `dsh-qq-bot` 段合并进目标 patch：**已有同名段则整段替换**，不重复追加；
-4. 把 `persona/persona.text` **写回配置**的 `persona.text`（不只是落一个文件）；
+3. **只替换你勾选的那些一级配置块**（`onebot` / `persona` / `group` / `vision` …），未勾选的块、注释、缩进、同级其它键一律不动；
+4. 每写一项后**回读逐字比对**，不一致则该项失败并跳过（不会写坏配置）；
 5. 恢复记忆库：目标已有 `memory.db` 则改名备份，并把 `-wal`/`-shm` 一起挪走（否则旧 WAL 会污染新库）；
-6. 打印后续必须手动做的事。
+6. 返回 `applied[]` 与 `failed[]`，并打印后续必须手动做的事。
+
+> **语义提醒**：v0.5.0 起是**逐项**导入，不再整段覆盖 `dsh-qq-bot`。
+> 旧格式包（≤0.4.0）会被拒绝，请用新版重新导出。
+> 配置项是**动态发现**的（`GET /dsh-qq-vault/items`，真机 20 项），qq-bot 升级新增字段会自动出现在列表里。
 
 **怎么知道成功了**：
 

@@ -19,6 +19,6 @@
 
 1. **症状 → 原因 → 处理**、**备份**、**升级**、**手动安装** → 并入 `05-handover/OPERATIONS.md` §2–§6；
 2. **紧急静音**、**成本控制**、**常用指令** → 并入同文 §8；
-3. 已失效不再保留的旧说法（`soul-md/memory` 记忆目录、`/安静` 指令、TTS 的 SILK/AMR 结论、`qwen3.8` 模型名）——这些在当前实现里都不成立：记忆由 `meow-memory` 按工作区存放，`admin.enabled=false` 时群管理指令全部拒绝，TTS/STT 在 qq-bot v0.12.8 里尚未实现。
+3. 已失效不再保留的旧说法（`soul-md/memory` 记忆目录、`/安静` 指令、TTS 的 SILK/AMR 结论、`qwen3.8` 模型名）——这些在当前实现里都不成立：记忆由 `meow-memory` 按工作区存放，`admin.enabled=false` 时群管理指令全部拒绝，TTS/STT 在 qq-bot v0.14.0 里尚未实现。
 
 保留本文的另一个原因：Git 历史与旧 Issue 里还有指向它的链接。

@@ -60,31 +60,36 @@ git push
 
 ## 四、密钥风险与处置
 
-`config/cordis.patch.yml` 目前包含真实值：NapCat token、BotQQ、owner QQ 号、群号。
+**当前状态（2026-11-14 已处置完毕）**：真实配置 `config/cordis.patch.yml`（含 NapCat token、BotQQ、owner QQ 号、群号）
+**不在仓库里**——已被 `.gitignore` 排除，仓库只有脱敏模板 `config/cordis.patch.example.yml`。
+历史里曾出现明文 token（含几篇文档的示例），已通过重写历史清除，并**按已泄露处理、需要轮换**。
 
-- **Git 仓库是私有**的 → 当前可接受，且方便一键部署；
+仍然成立的规则：
+
+- **Git 仓库现在是公开的** → 任何凭据都不能进库，也不能写进文档示例；
 - **网盘对项目资产可见成员全部可见** → 风险更高；
-- **Git 历史永久保留** → 一旦转公开，删文件也抹不掉历史。
+- **Git 历史永久保留** → 删文件抹不掉历史，只能重写 + 轮换密钥。
 
-### 转公开 / 外发之前必做
+### 要公开 / 外发前自查
 
 ```bash
-# 1. 生成脱敏模板
-python3 scripts/scrub-secrets.py
+# 1) 仓库里不该出现真实配置
+git ls-files | grep -c "config/cordis.patch.yml"      # 期望 0
 
-# 2. 把真实配置从版本库移除（保留本地副本）
-cp config/cordis.patch.yml /tmp/cordis.real.yml
-git rm --cached config/cordis.patch.yml
-echo "config/cordis.patch.yml" >> .gitignore
+# 2) 工作树里也不该被跟踪
+git status --short | grep "config/cordis.patch.yml"   # 期望无输出
 
-# 3. 提交并检查历史里是否还有残留
-git log -S "<你的旧 token 前 8 位>" --oneline   # 有输出说明历史里仍有，需要改历史或轮换 token
+# 3) 历史里是否还有残留（有输出就说明还未清净）
+git log -S "<你的旧 token 前 8 位>" --oneline
 
-# 4. 轮换 token（既然明文出现过，就当它泄露了处理）
+# 4) 轮换 token（既然明文出现过，就当它泄露了处理）
 openssl rand -hex 32
 ```
 
-脱敏版字段对照：
+> 历史残留的清理方式：`git filter-repo` 或重写 commit；清完必须 `git gc --prune=now`，
+> 并删掉远端旧分支 / stash 引用（它们会让旧对象一直可达），最后用**全新克隆**复核。
+
+脱敏版字段对照（`config/cordis.patch.example.yml` 里就是这套占位符）：
 
 | 真实值 | 占位符 |
 |---|---|

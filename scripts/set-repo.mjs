@@ -93,6 +93,16 @@ if (typeof args.repo !== 'string') {
 }
 const repo = normalizeRepo(args.repo);
 if (repo === PLACEHOLDER) fail('--repo 仍然是占位符，请填真实地址');
+
+/**
+ * 历史仓库地址（可重复 --from）。
+ *
+ * 为什么需要：README 里的安装命令一旦写成当时的真实地址，就再也不会命中 PLACEHOLDER，
+ * 换仓库时会被漏掉——而市场详情页拉的正是包 README，等于给用户发死链。
+ * @type {string[]}
+ */
+const fromArgs = args.from === undefined ? [] : (Array.isArray(args.from) ? args.from : [args.from]);
+const oldRepos = fromArgs.map((value) => normalizeRepo(String(value))).filter((value) => value !== repo);
 const branch = typeof args.branch === 'string' ? args.branch : 'main';
 const write = args.write === true;
 
@@ -125,11 +135,28 @@ for (const dir of PACKAGES) {
 for (const relative of TEXT_FILES) {
   const file = path.join(REPO_ROOT, relative);
   if (!fs.existsSync(file)) continue;
-  const text = fs.readFileSync(file, 'utf8');
-  if (!text.includes(PLACEHOLDER)) continue;
-  const count = text.split(PLACEHOLDER).length - 1;
-  changes.push({ file, detail: `占位符 ×${String(count)} → ${repo}` });
-  if (write) fs.writeFileSync(file, text.split(PLACEHOLDER).join(repo));
+  let text = fs.readFileSync(file, 'utf8');
+  const details = [];
+
+  if (text.includes(PLACEHOLDER)) {
+    const count = text.split(PLACEHOLDER).length - 1;
+    details.push(`占位符 ×${String(count)}`);
+    text = text.split(PLACEHOLDER).join(repo);
+  }
+
+  for (const old of oldRepos) {
+    // 同时处理裸地址与 git+…git 形式，否则安装命令会残留旧主机
+    for (const [before, after] of [[`git+${old}.git`, `git+${repo}.git`], [old, repo]]) {
+      if (!text.includes(before)) continue;
+      const count = text.split(before).length - 1;
+      details.push(`旧地址 ${before} ×${String(count)}`);
+      text = text.split(before).join(after);
+    }
+  }
+
+  if (details.length === 0) continue;
+  changes.push({ file, detail: `${details.join(' / ')} → ${repo}` });
+  if (write) fs.writeFileSync(file, text);
 }
 
 if (changes.length === 0) {
@@ -142,3 +169,15 @@ for (const change of changes) {
   process.stdout.write(`• ${path.relative(REPO_ROOT, change.file)}\n    ${change.detail}\n`);
 }
 process.stdout.write(`\n共 ${String(changes.length)} 个文件。${write ? '' : '\n（dry-run：加 --write 才会落盘）'}\n`);
+
+// 自检：文本文件里若还残留已知旧地址，说明有人手写过安装命令，提示去核
+const KNOWN_OLD_HOSTS = ['cnb.cool'];
+for (const relative of TEXT_FILES) {
+  const file = path.join(REPO_ROOT, relative);
+  if (!fs.existsSync(file)) continue;
+  const text = fs.readFileSync(file, 'utf8');
+  for (const host of KNOWN_OLD_HOSTS) {
+    if (!text.includes(host)) continue;
+    process.stderr.write(`! ${relative} 仍含旧主机 ${host}，请人工核对（可能是历史说明，也可能是漏改的安装命令）\n`);
+  }
+}

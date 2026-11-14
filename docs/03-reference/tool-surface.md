@@ -1,6 +1,6 @@
 # QQ 会话的工具面（tool surface）
 
-> 截至 2026-11-14，`dsh-qq-whale` v0.14.0 + `dsh-qq-bot` v0.12.8。
+> 截至 2026-11-14，`dsh-qq-whale` v0.14.0 + `dsh-qq-bot` v0.14.0。
 > 本文回答一个具体问题：**QQ 群/私聊里，那条鱼到底能用哪些工具？为什么它有时看得见却用不了？**
 
 ---
@@ -36,7 +36,7 @@
 | QQ 读 | `qq_history` `qq_imgsearch` | 群历史（默认回看 5 条 / 3 张图）、图片反搜 |
 | QQ 联网 | `qq_websearch` `qq_webfetch` | 走插件自己的代理与多引擎配置 |
 | QQ 出图 | `qq_draw` | `imageGen.enabled=false` 时会被拒（目前就是关的） |
-| 工作区读写 | `read` `write` `edit` `read_image` | `read_image` 是识图主路径（见 §5） |
+| 工作区读写 | `read` `write` `edit` `read_image` | `read_image` 用于主动打开工作区图片；QQ 收图走原生附件，不靠它（见 §5） |
 | 交互 | `ask_user_question` `todo_write` | 反问与记事；分寸写在人设卡「追问的分寸」 |
 | 记忆 | `memory_search` `memory_read` `memory_remember` `memory_update` `memory_project` `memory_find_similar` `memory_dream` `memory_home` | `meow-memory` 按工作区存放，群聊私聊共用一份 |
 
@@ -71,10 +71,18 @@
 
 ## 5. 与识图的关系（常见误区）
 
-- ✅ **正确路径**：qq-bot 把图落盘到 `QQ_msg/qq-images/<会话>/`，消息文本里带路径 → agent 自己调 `read_image` 打开原图 → 模型真正看到画面。
-- ❌ **不要依赖**：qq-bot 自带的「视觉描述注入」（另调一次模型写描述）——实测**空返回**（日志 `视觉请求空返回…流式结束无文本`），把 `maxTokens` 从 512 改到 4096 仍然空，所以那个补丁已撤销（改 node_modules 的补丁每次升级都会丢，不是长久方案）。
+**现状（qq-bot 0.14.0）**：识图有两条互斥路径，由 `vision.provider` / `vision.model` 是否留空决定。
 
-所以 `read_image` 必须在白名单里；把它删掉，识图就退化成「只知道有人发了张图」。
+| 配置 | 走哪条 | 结果 |
+|---|---|---|
+| **两项都留空**（本机现状） | **原生附件**：图片作为 `image` 块随 user 消息直接提交进会话 | 会话模型自己看图，零额外调用；**不需要 `read_image`** |
+| 至少填一项 | 先让视觉模型识别，再把描述并进消息末尾的 `[图片描述]` 段 | 多一次视觉调用（旧行为） |
+
+- ✅ **本机就是这么配的**，所以识图能用在「原生附件」这条路上。
+- ❌ **旧结论作废**：文档曾写「必须靠 agent 调 `read_image` 看落盘图」——那是 0.12.8 时代的绕路（当时描述注入空返回）。0.14.0 起不再需要，相关规则也已从 `preset-qq` 里删掉。
+- 落盘目录仍是 `QQ_msg/qq-images/<会话>/`（回合结算整体删除），主要供 `qq_imgsearch` 之类的工具按路径反搜。
+
+`read_image` 现在**不是**识图主路径，但仍在白名单里：它用于 agent 主动打开工作区里的图片文件（例如用户让它看某张本地图），与 QQ 收图无关。删掉它不影响 QQ 识图。
 
 ---
 

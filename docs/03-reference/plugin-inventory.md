@@ -26,7 +26,7 @@
 
 | 插件 | 作用 | 版本 | 安装 |
 |---|---|---|---|
-| `@sputnikzaychik/dsh-qq-bot` | QQ 收发、会话映射、权限、工具注册、主动发言治理 | `0.12.8` | `dsh plugin --profile web add @sputnikzaychik/dsh-qq-bot` ✅ 已装（WSS 实测通过） |
+| `@sputnikzaychik/dsh-qq-bot` | QQ 收发、会话映射、权限、工具注册、主动发言治理 | `0.14.0` | `dsh plugin --profile web add @sputnikzaychik/dsh-qq-bot` ✅ 已装（WSS 实测通过） |
 
 ### 自研（本仓库）
 
@@ -36,7 +36,7 @@
 
 | 插件 | 作用 | 版本 | 位置 |
 |---|---|---|---|
-| `dsh-qq-vault` | **设置页的「QQBot 备份」**：导出/导入 `dsh-qq-bot` 配置段（含 token）、人格生效值（`persona.text`）、记忆库、whale 配置。端点全 GET + 唯一 POST 上传（`/api/dsh-qq-vault/upload`）；导入默认 dry-run，需一次性确认码，写前自动备份（`.bak-vault-<时间戳>`），并按 manifest 的 sha256 校验完整性。**不搬** `package.json` 依赖清单、`llm-pi-ai` 的 provider/API key、会话历史 | `0.4.0` | [`packages/dsh-qq-vault/`](../../packages/dsh-qq-vault/README.md) |
+| `dsh-qq-vault` | **设置页的「QQBot 备份」**：**逐配置项**多选导出/导入（`GET /items` 动态发现，真机 20 项；`/plan` `/export` `/import` 用 `items=`）。端点全 GET + 唯一 POST 上传（`/api/dsh-qq-vault/upload`）；导入先逐项预览差异，需一次性确认码（绑定包路径 + 项集合），只写勾选的块，写前备份（`.bak-vault-<时间戳>`）并逐项 sha256 校验。**不搬** `package.json` 依赖清单、`llm-pi-ai` 的 provider/API key、会话历史 | `0.5.0` | [`packages/dsh-qq-vault/`](../../packages/dsh-qq-vault/README.md) |
 | `dsh-qq-whale` | **只做两件事**：① 提供 Agent preset（`id: qq`）——保留人格/指令/时间/工作区/压缩/交互，去掉 shell、文件搜索、后台任务、子代理；② 工具面收窄——`guard`（执行期拦截）+ 首个 `pre-step` 的 `restrict`（隐藏），默认挡住 23 项白名单外的工具。设置页只有两项：`mode`（`off`/`guard`/`hide`，默认 `hide`）与 `allowTools`，均 volatile。**不写人格**（人格在 `dsh-qq-bot.persona.text`），也不提供 `presetId`/`enabled`/`hideFromModel`（已删除） | `0.14.0` | [`packages/dsh-qq-whale/`](../../packages/dsh-qq-whale/README.md) · ADR-008/012 · [`../03-reference/tool-surface.md`](./tool-surface.md) |
 
 ### 强烈建议装（不是必需，但省很多事）
@@ -56,7 +56,7 @@ dsh plugin --profile web add dsh-plugin-shop@0.9.0
 
 | 插件 | 是什么 | 与本方案的关系 |
 |---|---|---|
-| `@zaofan/dsh-qqbot` `1.11.34` | 另一个 QQ 通道插件，依赖含 **`silk-wasm`**（SILK 编解码）与 `lamejs-fixed` | 版本远高于我们用的 `0.12.8`（1.11 vs 0.12）。**silk-wasm 正好解决语音转码痛点**。当前插件已跑通，暂不切换；若将来 TTS 链路卡在 SILK 转码上，优先评估它 |
+| `@zaofan/dsh-qqbot` `1.11.34` | 另一个 QQ 通道插件，依赖含 **`silk-wasm`**（SILK 编解码）与 `lamejs-fixed` | 版本远高于我们用的 `0.14.0`（1.11 vs 0.14）。**silk-wasm 正好解决语音转码痛点**。当前插件已跑通，暂不切换；若将来 TTS 链路卡在 SILK 转码上，优先评估它 |
 | `dsh-bigfish` `0.6.0` | **桌面宠物**：装在 DSH Web 右下角的可拖动大肥鱼，101 类动画 + `.dshpet` 角色包 + 160 句台词 | **同名不同物，勿混淆**——它是桌面陪伴宠物，不是 QQ 群聊人格。想要群里那条鱼请装 `dsh-qq-whale`。形象同源（鲸鱼女仆），台词库与角色包思路值得借鉴 |
 | `@xmanrui/dsh-im` | 把微信、飞书、企微、钉钉、QQ、Telegram 等接入 DSH 的多通道插件 | 若将来要把同一个人格搬到别的平台，先看它 |
 | `dsh-soul-md` `0.10.5` | **人设卡 + 长期记忆**插件：`memory_read/append/rewrite/search` 工具、`core.md` + `topics/*.md` 分层、关键词召回、压缩后补偿 | ✅ **已评估，不采用**（但抄了它的字段设计）。原因：记忆是单一全局目录 `$DSH_HOME/soul-md/memory/`，**工具签名只有 topic 没有 scope**，无法做群级分片——详见 ADR-005 |
