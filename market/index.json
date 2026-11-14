@@ -39,9 +39,9 @@
       },
       "icon": "../packages/dsh-qq-vault/icon.svg",
       "author": "civer",
-      "homepage": "https://cnb.cool/civer/dsh-qq-instruction",
+      "homepage": "https://github.com/Quisperc/dsh-qq-instruction",
       "repository": {
-        "url": "https://cnb.cool/civer/dsh-qq-instruction",
+        "url": "https://github.com/Quisperc/dsh-qq-instruction",
         "directory": "packages/dsh-qq-vault"
       },
       "metadata": {
@@ -65,11 +65,11 @@
       "versions": [
         {
           "version": "0.5.0",
-          "publishTimestamp": 1794650216,
+          "publishTimestamp": 1794650759,
           "source": {
             "type": "git",
-            "url": "https://cnb.cool/civer/dsh-qq-instruction",
-            "commit": "eba8c786f023bccb6a478dc9395d62148380c244",
+            "url": "https://github.com/Quisperc/dsh-qq-instruction",
+            "commit": "c51a08df86f0c1176072d740ab75ed2f6fc96501",
             "path": "packages/dsh-qq-vault"
           },
           "engines": {
@@ -90,9 +90,9 @@
       },
       "icon": "../packages/dsh-qq-whale/icon.svg",
       "author": "civer",
-      "homepage": "https://cnb.cool/civer/dsh-qq-instruction",
+      "homepage": "https://github.com/Quisperc/dsh-qq-instruction",
       "repository": {
-        "url": "https://cnb.cool/civer/dsh-qq-instruction",
+        "url": "https://github.com/Quisperc/dsh-qq-instruction",
         "directory": "packages/dsh-qq-whale"
       },
       "metadata": {
@@ -112,11 +112,11 @@
       "versions": [
         {
           "version": "0.14.0",
-          "publishTimestamp": 1794650216,
+          "publishTimestamp": 1794650759,
           "source": {
             "type": "git",
-            "url": "https://cnb.cool/civer/dsh-qq-instruction",
-            "commit": "eba8c786f023bccb6a478dc9395d62148380c244",
+            "url": "https://github.com/Quisperc/dsh-qq-instruction",
+            "commit": "c51a08df86f0c1176072d740ab75ed2f6fc96501",
             "path": "packages/dsh-qq-whale"
           },
           "engines": {

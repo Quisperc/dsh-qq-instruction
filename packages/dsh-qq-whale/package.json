@@ -74,12 +74,12 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://cnb.cool/civer/dsh-qq-instruction.git",
+    "url": "git+https://github.com/Quisperc/dsh-qq-instruction.git",
     "directory": "packages/dsh-qq-whale"
   },
-  "homepage": "https://cnb.cool/civer/dsh-qq-instruction/tree/main/packages/dsh-qq-whale",
+  "homepage": "https://github.com/Quisperc/dsh-qq-instruction/tree/main/packages/dsh-qq-whale",
   "bugs": {
-    "url": "https://cnb.cool/civer/dsh-qq-instruction/issues"
+    "url": "https://github.com/Quisperc/dsh-qq-instruction/issues"
   },
   "license": "MIT",
   "devDependencies": {
