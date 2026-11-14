@@ -4,6 +4,14 @@
 > 每次改动都要记一笔——**半年后你会想知道当时为什么这么改**。
 > 版本号是**双轨**的（项目本体 + 插件包），规则见 CONTRIBUTING §6。
 
+## [1.37.0] - 2026-11-15（按官方规范重做 guard 生命周期：双属主 + 存量补装）
+
+### Changed — dsh-qq-whale v0.14.2
+- `installGuard` 现在**回传** `tools.guard()` 的 disposer（官方 JSDoc：`@returns the effect disposer that removes this guard`）
+- `installAgentGuard` 按官方 `practices.md` 第 8/19 条实现**双属主**：guard 由 agent ctx 持有，同时把 disposer 收进插件自己的 `ctx.effect`，插件卸载也能撤
+- **新增存量 agent 补装**：用 `agents.list()` 枚举活着的 agent，重载插件即可对现有 QQ 会话生效，**不必再重启 DSH**（根治今天两次踩到的「改了不生效」）
+- 测试 61 → **62 项**（新增 disposer 转发、补装+卸载撤离两项）
+
 ## [1.36.0] - 2026-11-15（钩子生命周期经验落地 + TTS 真机验证成功）
 
 ### Verified — qq_voice 修复后真机成功

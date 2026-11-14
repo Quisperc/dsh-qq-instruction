@@ -13,7 +13,8 @@ function fakeAgent(id, options = {}) {
       get: (key) => {
         if (key !== 'tools' || options.noTools) return undefined;
         return {
-          ...(options.noGuard ? {} : { guard: (fn) => guards.push(fn) }),
+          // 忠实模拟官方语义：guard() 返回移除该 guard 的 disposer
+          ...(options.noGuard ? {} : { guard: (fn) => { guards.push(fn); return () => { const i = guards.indexOf(fn); if (i >= 0) guards.splice(i, 1); }; } }),
           ...(options.noRestrict ? {} : { restrict: (filter) => restricts.push(filter) }),
           definitions: () => defs.map((n) => ({ name: n })),
         };
@@ -40,7 +41,10 @@ test('isQqAgent：只认 qqbot- 前缀', () => {
 // ---------------------------------------------------------------- installGuard
 test('installGuard：装执行期拦截，白名单内放行、其余拒绝', () => {
   const { agent, guards } = fakeAgent('qqbot-1');
-  assert.deepEqual(installGuard(agent), { ok: true });
+  const installed = installGuard(agent);
+  assert.equal(installed.ok, true);
+  // 官方语义：guard() 的返回值是 disposer，必须能拿到（拿不到就是本插件又把它丢了）
+  assert.equal(typeof installed.dispose, 'function', '应回传 disposer');
   assert.equal(guards.length, 1);
   const guard = guards[0];
   assert.equal(guard({ name: 'qq_history' }), undefined);
@@ -233,4 +237,42 @@ test('installGuard：名单每次调用现读，热改后老 agent 立刻生效'
   assert.equal(installGuard(agent2, ['only_this']).ok, true);
   assert.equal(guardFn({ name: 'only_this' }), undefined);
   assert.equal(typeof guardFn({ name: 'anything_else' }), 'string');
+});
+
+test('installGuard：回调的返回值就是 disposer，调用后守卫失效', async () => {
+  // 官方 dsh-tools 语义：guard() 返回「移除该 guard」的 effect disposer。
+  let fn = null;
+  let removed = 0;
+  const tools = { guard: (g) => { fn = g; return () => { removed += 1; }; } };
+  const agent = { id: 'qqbot-9', ctx: { get: () => tools } };
+  const r = installGuard(agent, ['a_tool']);
+  assert.equal(r.ok, true);
+  assert.equal(typeof r.dispose, 'function');
+  r.dispose();
+  assert.equal(removed, 1, 'dispose 应转调官方 disposer');
+});
+
+test('installAgentGuard：重载时补装存量 QQ agent，卸载时撤掉 guard', async () => {
+  // 2026-11-15 事故的根治：agent 长期存活，重载只影响新 agent → 必须补装存量；
+  // 同时官方规范要求「两个属主」，插件卸载要能把装上去的 guard 撤掉。
+  const live = [
+    { id: 'qqbot-private-1', ctx: { get: () => ({ guard: () => () => { qqRemoved += 1; }, definitions: () => [], restrict: () => ({ ok: true }) }) } },
+    { id: 'other-session', ctx: { get: () => ({ guard: () => () => {}, definitions: () => [], restrict: () => ({ ok: true }) }) } },
+  ];
+  let qqRemoved = 0;
+  const handlers = {};
+  const effects = [];
+  const logs = [];
+  const ctx = {
+    on: (event, fn) => { handlers[event] = fn; return () => {}; },
+    effect: (fn) => { effects.push(fn); },
+    get: (name) => (name === 'agents' ? { list: () => live } : undefined),
+    logger: { info: (m) => logs.push(m), warn: (m) => logs.push(m) },
+  };
+  assert.equal(installAgentGuard(ctx, { readConfig: () => ({ mode: 'guard', allowTools: ['x'] }) }), true);
+  assert.ok(logs.some((m) => /补装存量 agent 1 个/.test(m)), '应只补装 QQ agent');
+
+  // 卸载：插件自己的 effect 要能撤掉 guard
+  for (const fn of effects) { const d = fn(); if (typeof d === 'function') d(); }
+  assert.equal(qqRemoved, 1, '卸载后 guard 应被撤掉');
 });

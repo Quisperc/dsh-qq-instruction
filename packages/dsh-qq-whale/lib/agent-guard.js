@@ -81,7 +81,7 @@ export function installGuard(agent, allow = DEFAULT_ALLOW) {
 
   const resolveAllow = typeof allow === 'function' ? allow : () => allow;
   try {
-    tools.guard((exec) => {
+    const guardDisposer = tools.guard((exec) => {
       const name = exec !== null && exec !== undefined ? exec.name : undefined;
       // 名字都拿不到的调用一律拒：宁可误拒，也不要放行一个看不见的东西。
       if (typeof name !== 'string') return 'QQ 场景：该工具不可用';
@@ -96,7 +96,9 @@ export function installGuard(agent, allow = DEFAULT_ALLOW) {
       if (allowed.has(name)) return undefined;
       return `QQ 场景：工具 ${name} 不可用（只允许 QQ 工具、读写、提问/待办与记忆）`;
     });
-    return { ok: true };
+    // 官方语义：tools.guard() 返回的就是移除该 guard 的 effect disposer，必须交给调用方保管。
+    const dispose = typeof guardDisposer === 'function' ? guardDisposer : undefined;
+    return { ok: true, dispose };
   } catch (error) {
     return { ok: false, reason: error?.message ? String(error.message) : String(error) };
   }
@@ -236,29 +238,77 @@ export function installAgentGuard(ctx, options = {}) {
 
   try {
     if (typeof ctx.on !== 'function') return false;
+
+    /**
+     * 已装过守门的 agent → 它的 disposer。
+     *
+     * 官方规范（dsh-doc references/practices.md 第 8/19 条）：注册在 **别的 ctx**（这里是
+     * `agent.ctx`）上的东西有「两个属主」——既随 agent 释放回收，也要把 disposer 留在插件
+     * 自己的 effect 里，任一卸载都能撤掉。早期版本把这个 disposer 丢了，导致改逻辑后存量
+     * agent 仍按旧规则跑，只能重启 DSH（2026-11-15 事故）。
+     */
+    const disposed = new Map();
+    const disposeAll = () => {
+      for (const dispose of disposed.values()) {
+        try { if (typeof dispose === 'function') dispose(); } catch { /* 忽略 */ }
+      }
+      disposed.clear();
+    };
+    // 插件卸载时把在它生命周期内装上的 guard 一并撤掉。
+    if (typeof ctx.effect === 'function') ctx.effect(() => disposeAll);
+
+    /** 给一个 QQ agent 装守门（幂等：同一 agent 只装一次）。 */
+    const guardAgent = (agent) => {
+      if (disposed.has(agent)) return;
+      const cfg = readCfg();
+      if (!isRestrictionActive(cfg)) {
+        const why = cfg.mode === 'off' ? 'mode=off' : '白名单为空（视为不限制）';
+        ctx.logger?.info?.(`[dsh-qq-whale] 跳过收窄（${why}），agent ${String(agent.id)}`);
+        return;
+      }
+
+      // 传函数而不是数组：QQ agent 长期存活，名单必须每次调用现读（否则改白名单对老会话无效）
+      const installed = installGuard(agent, () => readCfg().allowTools);
+      if (installed.ok) {
+        if (typeof installed.dispose === 'function') disposed.set(agent, installed.dispose);
+        else disposed.set(agent, null);
+        ctx.logger?.info?.(`[dsh-qq-whale] 已装执行期拦截（agent ${String(agent.id)}）`);
+      } else {
+        ctx.logger?.warn?.(`[dsh-qq-whale] 拦截安装失败（${installed.reason}），该会话按未限制继续`);
+      }
+
+      if (wantsHide(cfg)) hideToolsAtFirstStep(agent, cfg.allowTools, ctx, readCfg);
+    };
+
     ctx.on('agent/created', (payload) => {
       try {
         const agent = payload !== null && payload !== undefined ? payload.agent : undefined;
         if (!isQqAgent(agent)) return;
-
-        const cfg = readCfg();
-        if (!isRestrictionActive(cfg)) {
-          const why = cfg.mode === 'off' ? 'mode=off' : '白名单为空（视为不限制）';
-          ctx.logger?.info?.(`[dsh-qq-whale] 跳过收窄（${why}），agent ${String(agent.id)}`);
-          return;
-        }
-
-        // 传函数而不是数组：QQ agent 长期存活，名单必须每次调用现读（否则改白名单对老会话无效）
-        const installed = installGuard(agent, () => readCfg().allowTools);
-        if (installed.ok) ctx.logger?.info?.(`[dsh-qq-whale] 已装执行期拦截（agent ${String(agent.id)}）`);
-        else ctx.logger?.warn?.(`[dsh-qq-whale] 拦截安装失败（${installed.reason}），该会话按未限制继续`);
-
-        if (wantsHide(cfg)) hideToolsAtFirstStep(agent, cfg.allowTools, ctx, readCfg);
+        guardAgent(agent);
       } catch (error) {
         // 串行事件里抛错会毁掉 agent 创建，宁可吞掉。
         try { ctx.logger?.warn?.(`[dsh-qq-whale] agent/created 监听异常已忽略：${error?.message || error}`); } catch { /* 忽略 */ }
       }
     });
+
+    /**
+     * 补装存量 agent。
+     *
+     * 为什么必须做：agent 是长期存活且被缓存的，插件重载只会对**之后新建**的 agent 生效；
+     * 不做补装的话，改完白名单/守卫逻辑仍要重启 DSH 或删会话才生效（2026-11-15 两次踩到）。
+     * `agents` 服务提供 `list()`（全部活着的 agent）与 `get(id)`。
+     */
+    try {
+      const registry = typeof ctx.get === 'function' ? ctx.get('agents') : undefined;
+      if (registry !== undefined && registry !== null && typeof registry.list === 'function') {
+        const live = registry.list().filter((agent) => isQqAgent(agent));
+        for (const agent of live) guardAgent(agent);
+        if (live.length > 0) ctx.logger?.info?.(`[dsh-qq-whale] 已补装存量 agent ${live.length} 个`);
+      }
+    } catch (error) {
+      try { ctx.logger?.warn?.(`[dsh-qq-whale] 补装存量 agent 失败（不影响新建的）：${error?.message || error}`); } catch { /* 忽略 */ }
+    }
+
     return true;
   } catch (error) {
     try { ctx.logger?.warn?.(`[dsh-qq-whale] 挂 agent/created 失败，跳过收窄：${error?.message || error}`); } catch { /* 忽略 */ }

@@ -1,6 +1,6 @@
 {
   "name": "dsh-qq-whale",
-  "version": "0.14.1",
+  "version": "0.14.2",
   "description": "给 QQ 会话提供受限 Agent preset（id: qq），并在设置页热调工具面收窄。",
   "icon": "icon.svg",
   "author": "civer",
