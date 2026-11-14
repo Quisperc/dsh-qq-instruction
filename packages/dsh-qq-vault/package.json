@@ -1,0 +1,91 @@
+{
+  "name": "dsh-qq-vault",
+  "version": "0.4.0",
+  "description": "QQBot 备份：在 DSH 设置页导出/导入 QQBot 的配置、人设与记忆（默认 dry-run，先备份再写入）。",
+  "icon": "icon.svg",
+  "author": "civer",
+  "type": "module",
+  "main": "lib/index.js",
+  "scripts": {
+    "test": "node --test test/*.mjs"
+  },
+  "exports": {
+    ".": "./lib/index.js",
+    "./package.json": "./package.json",
+    "./bundle": "./lib/bundle.js",
+    "./client": {
+      "default": "./lib/client/vault.js"
+    },
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "lib",
+    "CHANGELOG.md",
+    "cordis.patch.yml",
+    "icon.svg",
+    "LICENSE",
+    "locale",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=22.6",
+    "dsh": ">=0.2.0-rc.2"
+  },
+  "dsh": {
+    "runtime": "host",
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "compatibility": {
+      "dsh": ">=0.2.0-rc.2 <0.3.0"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-settings"
+      ]
+    },
+    "catalog": {
+      "category": "qq",
+      "summary": {
+        "en": "Export and import the QQ bot's config, persona and memory from the settings page (dry-run first, never overwrite without a one-time code).",
+        "zh": "在设置页导出/导入 QQBot 的配置、人设与记忆：默认只预览，写入要先备份并凭一次性确认码。"
+      },
+      "capabilities": [
+        "config-ui",
+        "backup",
+        "export",
+        "import"
+      ]
+    }
+  },
+  "meta": {
+    "title": "QQBot 备份",
+    "description": "在设置页导出/导入 QQBot 的配置、人设与记忆（默认 dry-run，先备份再写入）。"
+  },
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "qq",
+    "qqbot",
+    "backup",
+    "migrate",
+    "export",
+    "import",
+    "cordis",
+    "plugin",
+    "onebot",
+    "napcat",
+    "dsh-plugin"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://cnb.cool/civer/dsh-qq-instruction.git",
+    "directory": "packages/dsh-qq-vault"
+  },
+  "homepage": "https://cnb.cool/civer/dsh-qq-instruction/-/tree/main/packages/dsh-qq-vault",
+  "bugs": {
+    "url": "https://cnb.cool/civer/dsh-qq-instruction/-/issues"
+  },
+  "license": "MIT"
+}

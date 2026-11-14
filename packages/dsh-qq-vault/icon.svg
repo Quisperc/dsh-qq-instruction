@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="dsh-qq-vault">
+  <title>dsh-qq-vault</title>
+  <!-- 保险箱：备份/导出/导入 -->
+  <rect width="64" height="64" rx="14" fill="#1F8A70"/>
+  <rect x="13" y="15" width="38" height="34" rx="6" fill="#E9FBF5"/>
+  <rect x="19" y="21" width="26" height="22" rx="3.4" fill="#0E5F4C"/>
+  <circle cx="32" cy="32" r="6.4" fill="none" stroke="#E9FBF5" stroke-width="2.6"/>
+  <path d="M32 25.6v-1.8M32 40.2v-1.8M25.6 32h-1.8M40.2 32h-1.8" stroke="#E9FBF5" stroke-width="2.2" stroke-linecap="round"/>
+  <circle cx="32" cy="32" r="1.8" fill="#E9FBF5"/>
+  <path d="M35 43.5h4.5M22.5 43.5h4.5" stroke="#0E5F4C" stroke-width="0" />
+  <rect x="26" y="52" width="12" height="3.4" rx="1.7" fill="#E9FBF5"/>
+</svg>
