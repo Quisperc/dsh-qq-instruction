@@ -300,6 +300,8 @@ cd /tmp && dsh --profile web --dump-config > /dev/null; echo $?      # 改之前
 | **生图** | ❌ 不通 | 缺 key（`DASHSCOPE_API_KEY` 未注入）+ 端点不兼容（插件只拼 `<baseUrl>/images/generations`，DashScope 该路径 404） |
 | **TTS** | ❌ 未实现 | 需新写工具（100–200 行）+ 出站 record 段 + 音频需公网可访问 URL（NapCat 在远端读不到本地文件） |
 | **STT** | ❌ 未实现 | 需 `get_record` 取音频 → VAD → ASR → 注入；工作量大于 TTS |
+| 表情包 | ✅ 2026-11-14 开启 `sticker.enabled` + `sticker.collect`（存与偷）；`qq_sticker` 已进 whale 白名单（24 项） |
+| 上下文深度 | ✅ `history.scopeMessages` 5 → 15 |
 | 主动发言 | ✅ 已真开 |
 | 气泡拆分 | ✅ 默认开（≤80 字/段、最多 3 段）；2026-11-14 调成 0.6–2.2 秒间隔（原默认 0–5 秒，第二句可能隔 5 秒才来） | 想静音：`enabled: false`；想只观察：把 `dryRun` 改回 true（会持续烧 token） |
 | 群管理 | ❌ 整体关 | `admin.enabled=false` |
@@ -334,7 +336,20 @@ dsh-qq-vault ──> 独立（读写 profile 配置、记忆库；不依赖 whal
 
 校验器只读 root `engines.dsh`，`dsh.compatibility` **不被读取**（`dsh-app-boot lib/index.js:1101-1155`）。
 `dsh-qq-bot` 的 `engines.dsh` 无上界 → 升到 0.3 不会被拦，但很可能坏（深用 `sessionController` / `tools.guard` / `settings.configure` / `webServer.register`）。
-升级前：备份 `cordis.patch.yml`。**当前没有活跃的 node_modules 补丁**（识图那个已撤销），所以升级 dsh-qq-bot 不会丢东西。
+升级前：备份 `cordis.patch.yml`。
+
+**升级 dsh-qq-bot 之后必须重打一个补丁**（脚本化，不是手工改）：
+
+```bash
+node scripts/patch-qqbot.mjs            # 先看会改什么（dry-run）
+node scripts/patch-qqbot.mjs --write    # 打补丁
+# 然后重载插件（plugin_manager set_bundle 关→开）或重启容器
+node scripts/patch-qqbot.mjs --revert --write   # 需要还原时
+```
+
+补丁内容：`gateway/turn-runtime.js` 里「模型没产出文字就发一句（本轮没有产生文字回复：…）」改成**只在 turn/end 带 error 时才发**——正常结束但没文字 = 模型选择不说，静默跳过（用户 2026-11-14 决定）。
+
+脚本是幂等的；上游版本变了会因锚点匹配失败而**明确报错**，不会静默跳过。
 
 ---
 

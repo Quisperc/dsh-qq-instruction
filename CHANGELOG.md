@@ -4,6 +4,30 @@
 > 每次改动都要记一笔——**半年后你会想知道当时为什么这么改**。
 > 版本号是**双轨**的（项目本体 + 插件包），规则见 CONTRIBUTING §6。
 
+## [1.25.0] - 2026-11-14（按用户意愿调回：少干预、多能力）
+
+> 三条「减少替模型做决定」，两条「把能力放开」。
+
+### Changed — dsh-qq-whale
+- **移除 preset 系统提示里的输出硬约束**，prefix 恢复为纯风格锚点：`你是群里的聊天搭子，不是助手。说话简短自然。`
+  （上一版为了压「回复里带决策过程」加了「不写思考、选项、字数或自评」，用户要求撤回——尊重模型自己的表达）
+- `qq_sticker` 加入默认白名单：23 → **24 项**（表情包要用，模型得先看得见这个工具）
+
+### Added — 补丁脚本 `scripts/patch-qqbot.mjs`
+- 把 dsh-qq-bot 的「模型没产出文字 → 发一句（本轮没有产生文字回复：…）」改为**只在 turn/end 带 error 时才发**
+- 正常结束但没文字 = 模型选择不说，静默跳过（日志留一行）
+- 幂等、可 `--revert`、上游版本变了会因锚点不匹配**明确报错**而不是静默跳过
+- **升级 dsh-qq-bot 后必须重打**，已写进 `docs/05-handover/OPERATIONS.md`；npm 脚本 `patch:qqbot`
+
+### Changed — 运行配置（profile，非仓库文件）
+- `sticker.enabled: true` + `sticker.collect: true`：表情包**存与偷都开启**
+- `history.scopeMessages: 5 → 15`：上下文更多
+- 说明：`proactive` 于同日早些时候已改为 `dryRun: false` 真开
+
+### Known limitations
+- 表情包图库目录 `QQ_msg/sticker` 目前是空的，`qq_sticker` 要等放了图并建索引后才能真挑到图（`POST /dsh-qq-bot/sticker/rebuild`）
+- 撤回输出约束后，「回复里带自查过程」可能复现——这是用户明确选择接受的行为（模型不想回就不回、想怎么说就怎么说）
+
 ## [1.24.0] - 2026-11-14（仓库迁到公开 GitHub · 文档对齐）
 
 > 仓库从私有 CNB 迁到**公开 GitHub**，插件索引上 GitHub Pages；同时把文档里所有过时的地址与版本对齐到实况。

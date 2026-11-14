@@ -49,7 +49,7 @@ export const DEFAULT_MODE = 'hide';
 export const DEFAULT_ALLOW = [
   // QQ 自有能力
   'qqbot', 'qqconfig', 'qqgroup', 'qqauth',
-  'qq_history', 'qq_imgsearch', 'qq_websearch', 'qq_webfetch', 'qq_draw',
+  'qq_history', 'qq_imgsearch', 'qq_websearch', 'qq_webfetch', 'qq_draw', 'qq_sticker',
   // 工作区读写（QQ_msg 里的记忆与临时文件依赖它们）
   'read', 'write', 'edit', 'read_image',
   // 与人交互
