@@ -16,7 +16,6 @@ qqbot-migrate-*.tar.gz
 
 # 依赖（宿主 profile 提供；子包里的 node_modules 多为本机测试软链）
 node_modules/
-packages/*/node_modules/
 __pycache__/
 *.pyc
 .venv/
@@ -46,3 +45,6 @@ market/index.*.json
 
 # 1.8MB 未使用音频样本（TTS 未实现，属调试产物）
 samples/
+
+# 包目录的依赖软链（指向宿主 profile），不写斜杠以同时匹配符号链接
+packages/*/node_modules
