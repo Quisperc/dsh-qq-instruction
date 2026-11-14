@@ -130,7 +130,7 @@ QQ 客户端 → **NapCat**（协议翻译 + 门卫）→ **dsh-qq-bot**（接�
 | 「用了受限 preset，它就碰不到危险工具了」 | ❌ 错。实测会话里曾经能看见 82 个工具 |
 | 「真要限制必须显式调用 `tools.guard()`（执行期拦）或 `tools.restrict()`（连看都看不见）」 | ✅ 对。这两件事都由 `dsh-qq-whale` 的 `agent-guard.js` 做，与 preset 无关 |
 
-本仓库的做法分两层：`preset-qq` 只决定挂哪些插件行；真正的收窄由 `dsh-qq-whale` 的 `lib/agent-guard.js` 完成——agent 创建时装 `tools.guard()`（执行期拦截），首个 `agent/pre-step` 再用 `tools.restrict()` 把白名单外的工具从可见列表里摘掉（23 项白名单，改哪个由设置页的 `allowTools` 决定）。
+本仓库的做法分两层：`preset-qq` 只决定挂哪些插件行；真正的收窄由 `dsh-qq-whale` 的 `lib/agent-guard.js` 完成——agent 创建时装 `tools.guard()`（执行期拦截），首个 `agent/pre-step` 再用 `tools.restrict()` 把白名单外的工具从可见列表里摘掉（25 项白名单，改哪个由设置页的 `allowTools` 决定）。
 
 ### 4.2 人设（人格）有两条通道，别以为写一处就够了
 

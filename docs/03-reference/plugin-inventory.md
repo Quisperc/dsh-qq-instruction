@@ -37,6 +37,7 @@
 | 插件 | 作用 | 版本 | 位置 |
 |---|---|---|---|
 | `dsh-qq-vault` | **设置页的「QQBot 备份」**：**逐配置项**多选导出/导入（`GET /items` 动态发现，真机 20 项；`/plan` `/export` `/import` 用 `items=`）。端点全 GET + 唯一 POST 上传（`/api/dsh-qq-vault/upload`）；导入先逐项预览差异，需一次性确认码（绑定包路径 + 项集合），只写勾选的块，写前备份（`.bak-vault-<时间戳>`）并逐项 sha256 校验。**不搬** `package.json` 依赖清单、`llm-pi-ai` 的 provider/API key、会话历史 | `0.5.0` | [`packages/dsh-qq-vault/`](../../packages/dsh-qq-vault/README.md) |
+| `dsh-qq-voice` | **语音回复（TTS）**：多一个 `qq_voice` 工具，把文字合成音频后以 `record` 段发到当前 QQ 会话。**自己连一条只发不收的 OneBot WS**（qq-bot 入站丢 record、出站无发送入口，见 ADR-013），因此 NapCat 侧的任意事件一律丢弃，不会与 qq-bot 双回复。权限与节流在插件自身：发言人只认「拥有者」（解析消息头，解析不到即拒）、目标须在 `group.allow` 与 `allowGroups` 内、每小时 6 条 + 10 秒冷却。默认**关闭**，需 TTS key | `0.1.0` | [`packages/dsh-qq-voice/`](../../packages/dsh-qq-voice/README.md) · ADR-013 |
 | `dsh-qq-whale` | **只做两件事**：① 提供 Agent preset（`id: qq`）——保留人格/指令/时间/工作区/压缩/交互，去掉 shell、文件搜索、后台任务、子代理；② 工具面收窄——`guard`（执行期拦截）+ 首个 `pre-step` 的 `restrict`（隐藏），默认挡住 23 项白名单外的工具。设置页只有两项：`mode`（`off`/`guard`/`hide`，默认 `hide`）与 `allowTools`，均 volatile。**不写人格**（人格在 `dsh-qq-bot.persona.text`），也不提供 `presetId`/`enabled`/`hideFromModel`（已删除） | `0.14.0` | [`packages/dsh-qq-whale/`](../../packages/dsh-qq-whale/README.md) · ADR-008/012 · [`../03-reference/tool-surface.md`](./tool-surface.md) |
 
 ### 强烈建议装（不是必需，但省很多事）

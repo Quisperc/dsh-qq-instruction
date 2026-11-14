@@ -7,7 +7,7 @@
 
 ## 1. 一句话结论
 
-**白名单 23 项 = 它能执行的；它「看见」的更多（默认 `mode: hide` 之外的情况）。**
+**白名单 25 项 = 它能执行的；它「看见」的更多（默认 `mode: hide` 之外的情况）。**
 看得见≠能用：模型仍会收到全部工具的 schema，但白名单外的调用会在执行期被拒。
 
 ---
@@ -28,7 +28,7 @@
 
 ---
 
-## 3. 白名单 23 项（默认值）
+## 3. 白名单 25 项（默认值）
 
 | 分组 | 工具 | 说明 |
 |---|---|---|
@@ -36,6 +36,8 @@
 | QQ 读 | `qq_history` `qq_imgsearch` | 群历史（默认回看 5 条 / 3 张图）、图片反搜 |
 | QQ 联网 | `qq_websearch` `qq_webfetch` | 走插件自己的代理与多引擎配置 |
 | QQ 出图 | `qq_draw` | `imageGen.enabled=false` 时会被拒（目前就是关的） |
+| QQ 表情包 | `qq_sticker` | 从图库挑图发表情；目录 `QQ_msg/sticker`（子目录=系列），需先跑 `POST /dsh-qq-bot/sticker/rebuild` 建索引才挑得到 |
+| **QQ 语音** | `qq_voice` | **仅拥有者**：解析消息头里的「身份:拥有者」，解析不到直接拒；目标须在 `group.allow` 内；每小时 6 条 + 10 秒冷却。**自己连一条只发不收的 WS**（不经过 qq-bot），默认关闭、需 TTS key。见 [ADR-013](../04-explanation/decisions/ADR-013-voice-tts-stt-route.md) |
 | 工作区读写 | `read` `write` `edit` `read_image` | `read_image` 用于主动打开工作区图片；QQ 收图走原生附件，不靠它（见 §5） |
 | 交互 | `ask_user_question` `todo_write` | 反问与记事；分寸写在人设卡「追问的分寸」 |
 | 记忆 | `memory_search` `memory_read` `memory_remember` `memory_update` `memory_project` `memory_find_similar` `memory_dream` `memory_home` | `meow-memory` 按工作区存放，群聊私聊共用一份 |

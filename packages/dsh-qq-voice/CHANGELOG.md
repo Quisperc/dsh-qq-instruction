@@ -32,3 +32,13 @@
 - 为什么不会双回复：我们这条连接只发不收。见 README §二。
 - 想让 QQ 会话真的用上本工具，还要把 `qq_voice` 加进 `dsh-qq-whale` 的白名单。见 README §六。
 - `mode: always`（文字回复后自动附语音）目前等同 `manual`，未实现。
+
+### 规范对齐（同日，与 whale / vault 同一套「插件规范」）
+- 补 `test/package-meta.test.mjs`（10 项）：元信息、catalog、`engines.dsh` 合法性、exports 指向真实文件、
+  `files` 清单、图标（SVG + viewBox + <256 KiB）、locale 中英、keywords、**可选 peer 依赖**、不得带 lockfile
+- README 重写为与 vault 同构：一、它能做什么（含「一次真实用法」与「设置页长什么样」ASCII）/
+  二、安装三条路径（补上**包目录 node_modules 软链**这一步与其原因）/ 三、配置（新增 §3.1 型号与端点对照、
+  §3.2 复刻音色两步流程、§3.3 qianwenai 配置样例）/ 四、发送原理 / 五、权限 / 六、与 whale 的关系 /
+  七、测试 / 八、未验证项 / 九、已知限制 / 十、卸载
+- 记录 2026-11-15 真机事实：`qwen-audio-3.1-tts-*` 是实时(WS)型号（HTTP 报 `url error`）、
+  `qwen-audio-3.0-tts-flash` 可用且支持复刻音色、`seed` 在 `input` 里

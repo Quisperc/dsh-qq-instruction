@@ -23,7 +23,7 @@
 | 入站消息 → 回复 | OneBot 11 事件上报 | ✅ 已实测 |
 | 人格（大肥鱼 4.5k 人设卡） | `dsh-qq-bot.persona.text` | ✅ 生效（首轮注入） |
 | 会话 preset | `preset-qq`（受限） | ✅ 生效（**注意：老会话 preset 锁死，换只能重建**） |
-| 工具面收窄 | `dsh-qq-whale`：guard（执行期）+ 首个 pre-step 的 `restrict`（隐藏） | ✅ 23 项白名单，见 [tool-surface](./docs/03-reference/tool-surface.md) |
+| 工具面收窄 | `dsh-qq-whale`：guard（执行期）+ 首个 pre-step 的 `restrict`（隐藏） | ✅ 25 项白名单，见 [tool-surface](./docs/03-reference/tool-surface.md) |
 | 联网 | `qq_websearch` / `qq_webfetch` | ✅ 可用（通用 `web_*` 已从白名单移除，避免与 qq-bot 自带能力重复） |
 | **识图** | qq-bot **原生附件**（`vision.provider`/`vision.model` 都留空） | ✅ 图片作为附件随消息进会话，模型直接看；不再需要 `read_image` 绕路 |
 | **生图** | `qq_draw` | ❌ 关着，且缺 key + 端点不兼容 |

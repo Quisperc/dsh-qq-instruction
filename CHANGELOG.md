@@ -4,6 +4,22 @@
 > 每次改动都要记一笔——**半年后你会想知道当时为什么这么改**。
 > 版本号是**双轨**的（项目本体 + 插件包），规则见 CONTRIBUTING §6。
 
+## [1.32.0] - 2026-11-15（TTS 接通自定义音色 + voice 插件规范对齐）
+
+### Added — TTS 真机接通（qianwenai 平台）
+- 正确非实时端点：`POST https://maas.qianwenaiapi.com/api/v1/services/audio/tts/SpeechSynthesizer`
+  （`aigc/multimodal-generation/generation` 对 3.1 系列报 `url error`）
+- 可用型号 `qwen-audio-3.0-tts-flash`；请求体 `{model, input:{text, voice, format, sample_rate, seed}}`（**seed 在 input 里**）
+- **用 `samples/龙灵安希-样本.wav` 复刻出音色**：`qwen-audio-3.0-tts-flash-longlinx-efc30de0…`
+  （复刻接口 `/api/v1/services/audio/tts/customization`，`action:create_voice`，prefix ≤10 位字母数字）
+- 端到端实测：合成 → 196KB WAV → 自己那条只发不收的 WS → `messageId` 返回
+
+### Changed — dsh-qq-voice 规范对齐（向 vault 看齐）
+- 新增 `test/package-meta.test.mjs`（10 项）锁住元信息/catalog/exports/files/图标/locale/可选 peer/无 lockfile → 测试 71 → **81 项**
+- README 重写为 discover 页可读结构（真实用法 / 设置页 ASCII / 型号端点对照表 / 复刻音色两步 / 卸载）
+- 图标统一为另两个包同款圆角瓦片风格
+- 文档登记：`plugin-inventory`、`tool-surface`（白名单 25 项 + `qq_voice` 行）、`OPERATIONS §11.5`（型号与端点）
+
 ## [1.31.0] - 2026-11-15（ADR-013：语音路线与协议评估）
 
 ### Added

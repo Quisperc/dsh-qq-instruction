@@ -48,7 +48,7 @@
 
 | 文档 | 查什么 | 状态 |
 |---|---|---|
-| [`tool-surface.md`](./03-reference/tool-surface.md) | **QQ 会话到底能用哪些工具**：23 项白名单、可见≠可执行、guard 与 restrict 分工、怎么改 | ✅ 新增（2026-11-14） |
+| [`tool-surface.md`](./03-reference/tool-surface.md) | **QQ 会话到底能用哪些工具**：25 项白名单、可见≠可执行、guard 与 restrict 分工、怎么改 | ✅ 新增（2026-11-14） |
 | [`config-schema.md`](./03-reference/config-schema.md) | `dsh-qq-bot` v0.14.0 的完整配置字段 | ✅ 有效（**没有** tts/stt 组，别找了） |
 | [`preset-qq-contract.md`](./03-reference/preset-qq-contract.md) | `preset-qq` 每行能写什么（官方包核对版）、两条人格通道 | ✅ 有效（`persona.prefix` 文案 2026-11-14 已改，见文内注） |
 | [`plugin-inventory.md`](./03-reference/plugin-inventory.md) | 相关插件清单（含别装错的 `dsh-bigfish`） | ✅ 有效（whale 行 2026-11-14 已更新到 0.12） |

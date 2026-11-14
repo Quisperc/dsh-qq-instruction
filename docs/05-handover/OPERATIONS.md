@@ -277,7 +277,8 @@ cd /tmp && dsh --profile web --dump-config > /dev/null; echo $?      # 改之前
 | 主动发言 | 2026-11-14 起真开（`dryRun=false`），闸门：60 分钟判断一次、每小时≤2、每日≤8、23:00-08:00 静默、间隔≥15 分钟、≥6 条新消息才判断、`eventGuard` 开、120 字上限 |
 | 频率闸 | `maxPerHour: 2` / `maxPerDay: 8` / `minGapMinutes: 15`（`proactive` 分组） |
 | 预算闸 | 给 API Key 设月度上限（服务商控制台），这是唯一硬上限 |
-| TTS/STT | **尚未实现**（qq-bot v0.14.0 无 tts/stt 配置组），暂不产生语音成本 |
+| TTS | **已实现**（插件 `dsh-qq-voice`，非 qq-bot 自带）：按字数计费，插件自身限每小时 6 条 |
+| STT | 未实现（qq-bot 入站丢 record，见 ADR-013），不产生成本 |
 
 ### 8.3 常用指令（群里直接发）
 
@@ -298,7 +299,7 @@ cd /tmp && dsh --profile web --dump-config > /dev/null; echo $?      # 改之前
 | 群历史、图片反搜 | ✅ 可用 | — |
 | **识图** | ✅ 可用（qq-bot 0.14.0 原生附件；两项留空即走这条路） | 若把 `vision.provider/model` 任填一项，会退回「先描述再并入」，反而多一次调用 |
 | **生图** | ✅ 已打通（2026-11-14 深夜） | 火山方舟 Seedream 4.0。参数：`baseUrl=https://ark.cn-beijing.volces.com/api/v3`、`model=doubao-seedream-4-0-20260415`、`size=1024x1024`、`enabled=true`，key 存在 `imageGen.apiKey`（600 权限 profile，已 gitignore） |
-| **TTS（语音回复）** | ✅ 发送链路已实测（2026-11-15） | 独立插件 `dsh-qq-voice`：自己连一条**只发不收**的 WS，发 `record` 段。实测 `WAV` 直发可用（**不需要 silk/ffmpeg**）。DashScope TTS 待用户提供 key（`qwen-audio-3.1-tts-flash`）。默认关闭 |
+| **TTS（语音回复）** | ✅ 发送链路已实测（2026-11-15） | 独立插件 `dsh-qq-voice`：自己连一条**只发不收**的 WS，发 `record` 段。实测 `WAV` 直发可用（**不需要 silk/ffmpeg**）。默认关闭，需 TTS key。型号/端点见 §11.5 |
 | **STT（听语音）** | ⛔ 卡在 qq-bot | 官方 `speech-to-text` + SenseVoice 服务已在本机可用，但 qq-bot 把入站 `record` 丢成 `[语音]`、拿不到音频 URL。要么上游改约 10 行，要么 NapCat 侧做 |
 
 > **语音插件三条要点**：① 它**不经过 qq-bot**（qq-bot 出站不支持 record，也不提供服务）；② 第二条 WS **只发不收**，绝不响应事件，所以不会双回复；③ 权限（owner 判定 + 群白名单 + 每小时 6 条节流）都在插件自身，解析不到发言人身份就**保守拒绝**。
@@ -316,7 +317,7 @@ cd /tmp && dsh --profile web --dump-config > /dev/null; echo $?      # 改之前
 | 耗时 | 单张 7–12 秒；`timeoutMs` 180 秒足够，失败会自动重试 |
 | **TTS** | ❌ 未实现 | 需新写工具（100–200 行）+ 出站 record 段 + 音频需公网可访问 URL（NapCat 在远端读不到本地文件） |
 | **STT** | ❌ 未实现 | 需 `get_record` 取音频 → VAD → ASR → 注入；工作量大于 TTS |
-| 表情包 | ✅ 2026-11-14 开启 `sticker.enabled` + `sticker.collect`（存与偷）；`qq_sticker` 已进 whale 白名单（24 项） |
+| 表情包 | ✅ 2026-11-14 开启 `sticker.enabled` + `sticker.collect`（存与偷）；`qq_sticker` / `qq_voice` 已进 whale 白名单（25 项） |
 | 上下文深度 | ✅ `history.scopeMessages` 5 → 15 |
 | 主动发言 | ✅ 已真开 |
 | 气泡拆分 | ✅ 默认开（≤80 字/段、最多 3 段）；2026-11-14 调成 0.6–2.2 秒间隔（原默认 0–5 秒，第二句可能隔 5 秒才来） | 想静音：`enabled: false`；想只观察：把 `dryRun` 改回 true（会持续烧 token） |
@@ -430,3 +431,34 @@ node scripts/make-market-index.mjs --repo https://github.com/<owner>/<repo> --wr
 
 自托管索引只解决「自己/别人加索引就能装」，官方目录（DSH 自带市场源）需要另外提交。材料清单见
 [`market/README.md`](../../market/README.md) §5；其中「公开仓库」一项已满足。
+
+### 11.5 TTS 型号与端点（2026-11-15 真机实测）
+
+同一个 key、同一个账号，三种「qwen tts」行为完全不同——**400 `url error` 通常是端点与型号不匹配，不是 key 错**（key 错会先 401）：
+
+| 型号 | 端点 | 结果 |
+|---|---|---|
+| `qwen3-tts-flash` | DashScope 原生 `api/v1/services/aigc/multimodal-generation/generation` | ✅ 200，返回 `output.audio.url`（WAV，需再下载） |
+| `qwen-audio-3.1-tts-flash` / `-tts-plus` | 同上 | ❌ 400 `url error`——它们是**实时（WS）型号** |
+| `qwen-audio-3.1-tts-*` | qianwenai `api/v1/services/audio/tts/SpeechSynthesizer` | ❌ 仍 `url error` |
+| `qwen-audio-3.0-tts-flash` | qianwenai `api/v1/services/audio/tts/SpeechSynthesizer` | ✅ 可用，且**支持复刻音色** |
+
+**复刻音色**（系统音色只有 `qwen3-tts-flash` 那类支持，且它不支持复刻）：
+
+```text
+① POST /api/v1/services/audio/tts/customization
+   {"model":"voice-enrollment","input":{"action":"create_voice","target_model":"qwen-audio-3.0-tts-flash",
+    "prefix":"<≤10位字母数字>","audio":"data:audio/wav;base64,…","language_hints":["zh"]}}
+   → voice_id：qwen-audio-3.0-tts-flash-<prefix>-<hash>
+
+② POST /api/v1/services/audio/tts/SpeechSynthesizer
+   {"model":"qwen-audio-3.0-tts-flash",
+    "input":{"text":"…","voice":"<voice_id>","format":"wav","sample_rate":24000,"seed":2024}}
+```
+
+> **`seed` 在 `input` 里**，不在 `parameters` 里。已创建音色 `longlinx`：
+> `qwen-audio-3.0-tts-flash-longlinx-efc30de04468458684cda530c7863e63`（用 `samples/龙灵安希-样本.wav` 复刻）。
+> 插件侧用 `requestTemplate` 覆盖请求体即可，不用改代码。
+
+**计费状态（用户侧，非代码）**：2026-11-15 实测 `maas.qianwenaiapi.com` 对所有模型（含普通 chat）返回
+`403 AccessDenied.Unpurchased`；DashScope `qwen3-tts-flash` 曾由 200 转 `400 Arrearage`。用 TTS 前先确认账户可用。
