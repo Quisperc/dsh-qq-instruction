@@ -50,8 +50,8 @@ test('truncateText：不超限原样返回，超限截断并如实标记', () =>
 });
 
 test('buildTtsBody：默认形状是 { model, input: { text, voice? }, parameters }', () => {
-  const body = buildTtsBody({ text: '你好', model: 'qwen-audio-3.1-tts-flash', voice: 'Cherry', format: 'wav' });
-  assert.equal(body.model, 'qwen-audio-3.1-tts-flash');
+  const body = buildTtsBody({ text: '你好', model: 'qwen3-tts-flash', voice: 'Cherry', format: 'wav' });
+  assert.equal(body.model, 'qwen3-tts-flash');
   assert.deepEqual(body.input, { text: '你好', voice: 'Cherry' });
   assert.deepEqual(body.parameters, { format: 'wav' });
 });

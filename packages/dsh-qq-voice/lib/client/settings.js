@@ -97,7 +97,7 @@ window.__ModuleLoader__.load({
       { key: 'mode', label: '模式', type: 'select', options: [['manual', 'manual —— 模型显式调用才发'], ['off', 'off —— 不注册工具'], ['always', 'always —— 预留（当前等同 manual）']] },
 
       { group: 'TTS（DashScope）' },
-      { key: 'ttsModel', label: '模型', type: 'text', hint: '如 qwen-audio-3.1-tts-flash' },
+      { key: 'ttsModel', label: '模型', type: 'text', hint: '如 qwen3-tts-flash' },
       { key: 'ttsVoice', label: '音色', type: 'text', hint: '留空 = 用模型默认；可选值见 DashScope 文档' },
       { key: 'apiKey', label: 'API key', type: 'secret', hint: '留空 = 不修改；也可只配下面的环境变量名' },
       { key: 'apiKeyEnv', label: 'key 环境变量', type: 'text', hint: '默认 DASHSCOPE_API_KEY' },

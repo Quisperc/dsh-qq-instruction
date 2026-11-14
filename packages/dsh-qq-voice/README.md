@@ -54,7 +54,7 @@ ln -s /path/to/dsh-qq-instruction/packages/dsh-qq-voice <profile>/node_modules/d
 |---|---|---|
 | `enabled` | **false** | 总开关。默认关：没填 key 时开着只会每次报错 |
 | `mode` | `manual` | `off` 不注册工具 / `manual` 模型显式调用才发 / `always` 预留（当前等同 manual） |
-| `ttsModel` | `qwen-audio-3.1-tts-flash` | TTS 模型 |
+| `ttsModel` | `qwen3-tts-flash` | TTS 模型。**注意**：`qwen-audio-3.1-tts-flash` 是实时(WS)型号，HTTP 端点会返回 400 `url error`；HTTP 可用的是 `qwen3-tts-flash`（实测 200 返回 WAV URL） |
 | `ttsVoice` | 空 | 音色名；留空=不传，用模型默认（可选值见 DashScope 文档） |
 | `apiKey` | 空（secret） | DashScope key；留空则读下面的环境变量 |
 | `apiKeyEnv` | `DASHSCOPE_API_KEY` | key 的环境变量名 |

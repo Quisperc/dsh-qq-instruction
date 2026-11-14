@@ -25,7 +25,7 @@ export const DEFAULT_CONFIG = Object.freeze({
   wsUrl: 'wss://qapi.civer.cn',
   accessToken: '',
   ttsBaseUrl: 'https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation',
-  ttsModel: 'qwen-audio-3.1-tts-flash',
+  ttsModel: 'qwen3-tts-flash',
   ttsVoice: '',
   apiKey: '',
   apiKeyEnv: 'DASHSCOPE_API_KEY',
@@ -66,7 +66,7 @@ export const Config = Schema.object({
   ttsBaseUrl: Schema.string().default(DEFAULT_CONFIG.ttsBaseUrl).volatile()
     .description('DashScope TTS 端点。注意是原生端点，不是 compatible-mode（那里只有 chat/embeddings）'),
   ttsModel: Schema.string().default(DEFAULT_CONFIG.ttsModel).volatile()
-    .description('TTS 模型 id，如 qwen-audio-3.1-tts-flash'),
+    .description('TTS 模型 id，如 qwen3-tts-flash（HTTP 可用）；qwen-audio-3.1-tts-flash 是实时(WS)型号，HTTP 会 400'),
   ttsVoice: Schema.string().default(DEFAULT_CONFIG.ttsVoice).volatile()
     .description('音色名（留空 = 不传，用模型默认；可选值见 DashScope 文档）'),
   apiKey: secretString('DashScope API key（只写字段；留空 = 读环境变量）'),
