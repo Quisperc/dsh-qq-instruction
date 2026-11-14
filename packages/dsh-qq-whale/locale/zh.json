@@ -1,6 +1,7 @@
 {
   "meta": {
     "title": "QQ 群聊受限预设（preset-qq）",
-    "description": "装上即多一张 preset-qq；设置页可热调收窄强度与工具白名单。"
+    "description": "装上即多一张 preset-qq；设置页可热调收窄强度与工具白名单。",
+    "detail": "docs/DETAIL.zh.md"
   }
 }

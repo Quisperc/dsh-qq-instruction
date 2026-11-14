@@ -31,7 +31,8 @@ export const name = 'dsh-qq-voice';
 
 // 不声明 inject：本插件对宿主服务是「有就用、没有就降级」。
 // tools 服务在 agent 作用域里出现，用 ctx.get 惰性取（见 registerTool）。
-export const inject = [];
+// 工具注册是插件的存在意义，tools 不是可选服务；声明后 apply 在 tools 就绪后运行（下面的 ctx.get/ctx.inject 分支保留作兜底）
+export const inject = ['tools'];
 
 /** 工具名：与 README、whale 白名单、设置页文案必须一致。 */
 export const TOOL_NAME = 'qq_voice';

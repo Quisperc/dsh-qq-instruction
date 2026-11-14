@@ -146,6 +146,9 @@ Cherry
 > `configForms` 不可用时（老版本 DSH），卡片会退化成一段只读说明，并告诉你直接改
 > `profiles/web/cordis.patch.yml` 里 `- id: dsh-qq-voice` 那段——不会白屏。
 
+
+> 插件管理面板里的详情页用 `docs/DETAIL.md`（中文为 `docs/DETAIL.zh.md`），只有一张特性图 `docs/preview.svg`；完整说明仍以本 README 为准。
+
 ## 二、安装（三条路径，选一条）
 
 ### 路径 A：插件市场（推荐，能收到更新）

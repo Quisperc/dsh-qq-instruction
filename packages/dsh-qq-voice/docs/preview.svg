@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="300" viewBox="0 0 640 300" role="img">
+  <title>文字消息被合成为语音气泡发回同一个会话，音色、语速与语气由模型按语境决定</title>
+  <!-- 左：文字气泡 -->
+  <g fill="none" stroke="#8A94A6" stroke-width="3" stroke-linejoin="round">
+    <rect x="44" y="88" width="140" height="92" rx="16" fill="#8A94A6" fill-opacity="0.10"/>
+    <path d="M76 180 l-6 24 l26 -20" fill="#8A94A6" fill-opacity="0.10"/>
+    <path d="M68 118 h92 M68 140 h70 M68 162 h48" stroke-linecap="round" stroke-opacity="0.75"/>
+  </g>
+  <!-- 中：合成箭头 + 声波 -->
+  <g fill="none" stroke="#4C8DFF" stroke-width="3" stroke-linecap="round">
+    <path d="M212 134 h40"/>
+    <path d="M244 126 l12 8 l-12 8"/>
+  </g>
+  <g fill="none" stroke="#4C8DFF" stroke-width="3" stroke-linecap="round">
+    <path d="M282 134 v0"/>
+    <path d="M296 118 v32"/>
+    <path d="M312 104 v60"/>
+    <path d="M328 92 v84"/>
+    <path d="M344 106 v56"/>
+    <path d="M360 120 v28"/>
+    <path d="M376 130 v8"/>
+  </g>
+  <!-- 右：语音气泡（波形 + 播放三角），表示同一条消息以语音发出 -->
+  <g fill="none" stroke="#22B07D" stroke-width="3" stroke-linejoin="round">
+    <rect x="410" y="76" width="186" height="104" rx="18" fill="#22B07D" fill-opacity="0.12"/>
+    <path d="M540 180 l-6 26 l-26 -22" fill="#22B07D" fill-opacity="0.12"/>
+    <circle cx="452" cy="128" r="20" fill="#22B07D" fill-opacity="0.20"/>
+    <path d="M446 118 l16 10 l-16 10 z" fill="#22B07D" fill-opacity="0.55"/>
+  </g>
+  <g fill="none" stroke="#22B07D" stroke-width="2.5" stroke-linecap="round" stroke-opacity="0.75">
+    <path d="M490 122 v12 M504 112 v32 M518 106 v44 M532 116 v24 M546 124 v8"/>
+  </g>
+  <!-- 底部：可调的三档（音色 / 语速 / 语气） -->
+  <g fill="none" stroke="#8A94A6" stroke-width="2.5" stroke-linejoin="round">
+    <rect x="196" y="216" width="248" height="46" rx="12" fill="#8A94A6" fill-opacity="0.08"/>
+    <path d="M236 216 v46 M318 216 v46 M400 216 v46" stroke-opacity="0.65"/>
+  </g>
+  <g fill="none" stroke="#4C8DFF" stroke-width="2.5" stroke-linecap="round">
+    <path d="M212 232 h14 M212 246 h10"/>
+    <path d="M334 232 h14 M334 246 h10"/>
+    <path d="M416 232 h14 M416 246 h10"/>
+    <circle cx="286" cy="239" r="9" fill="#4C8DFF" fill-opacity="0.25"/>
+    <circle cx="368" cy="239" r="9" fill="#4C8DFF" fill-opacity="0.25"/>
+    <circle cx="450" cy="239" r="9" fill="#4C8DFF" fill-opacity="0.25"/>
+  </g>
+</svg>

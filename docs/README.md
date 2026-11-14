@@ -54,6 +54,7 @@
 | [`plugin-inventory.md`](./03-reference/plugin-inventory.md) | 相关插件清单（含别装错的 `dsh-bigfish`） | ✅ 有效（whale 行 2026-11-14 已更新到 0.12） |
 | [`feature-matrix.md`](./03-reference/feature-matrix.md) | 需求能力 vs 原生/自研对照 | 📖 参考（结论性质，不随版本变） |
 | [`tts.md`](./03-reference/tts.md) | TTS 参数全景、语气池、标签白名单、钳制规则 | 📖 **未来规划参考**：qq-bot v0.14.0 **没有** TTS 实现，本文是选型与实测资料，不是当前能力 |
+| [`PLUGIN-SPEC-COMPLIANCE.md`](./03-reference/PLUGIN-SPEC-COMPLIANCE.md) | 三个自有插件对 **DSH 官方插件规范**的逐条合规矩阵（含本轮修正与不适合项） | ✅ 新增（2026-11-15） |
 | [`capability-report.md`](./03-reference/capability-report.md) | 2026-10-31/11-01 的 API 实测记录（哪些端点通、音色 ID、踩过的坑） | 🕰️ **部分过期**：识图结论已被推翻（见文内注）；生图/ASR 结论仍可参考 |
 
 ## 04-explanation —— 解释（为什么）

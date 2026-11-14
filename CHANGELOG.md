@@ -4,6 +4,24 @@
 > 每次改动都要记一笔——**半年后你会想知道当时为什么这么改**。
 > 版本号是**双轨**的（项目本体 + 插件包），规则见 CONTRIBUTING §6。
 
+## [1.38.0] - 2026-11-15（按官方规范对齐三插件：inject 声明 + 详情页）
+
+### Fixed（会真出 bug 的偏差）
+- **whale `inject` 漏声明 `agents`** → `[agents]`：`apply` 里用 `agents.list()` 补装存量 agent，声明后 Cordis 等它就绪再跑
+- **voice `inject` 漏声明 `tools`** → `[tools]`：注册工具是插件存在意义，非可选服务
+
+### Added — 插件面板详情页（三包）
+- 每包新增 `docs/DETAIL.md`（英文）+ `docs/DETAIL.zh.md`（中文）+ `docs/preview.svg`（640×300 纯矢量、无 `<text>`、中英共用）
+- `locale/{zh,en}.json` 加 `meta.detail`；`files` 补 `docs`
+- 按 `plugin-details.md` 的真实要求：**detail 文档只含一行特性图**，功能/用法留在 `meta.description` 与 README
+- 元信息测试各 +1 项（锁 detail 文件存在）
+
+### Added — 合规矩阵
+- `docs/03-reference/PLUGIN-SPEC-COMPLIANCE.md`：规范条目 × 三包 判定矩阵（✅/⚠️已修/⛔不适用）+ 复现命令 + 未做项理由
+
+### Versions
+- whale **0.14.3** · vault **0.6.1** · voice **0.3.1**
+
 ## [1.37.0] - 2026-11-15（按官方规范重做 guard 生命周期：双属主 + 存量补装）
 
 ### Changed — dsh-qq-whale v0.14.2

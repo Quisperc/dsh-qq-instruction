@@ -113,3 +113,19 @@ test('不声明 lockfile（依赖由宿主 profile 提供）', () => {
     );
   }
 });
+
+test('detail 文档：locale 声明与文件都在，且文档恰好一行图片（官方规格）', () => {
+  for (const [lang, doc] of [['en', 'docs/DETAIL.md'], ['zh', 'docs/DETAIL.zh.md']]) {
+    const locale = JSON.parse(readFileSync(join(root, `locale/${lang}.json`), 'utf8'));
+    assert.equal(locale.meta.detail, doc, `${lang} 的 meta.detail 应指向 ${doc}`);
+    const lines = readFileSync(join(root, doc), 'utf8').trim().split('\n');
+    assert.equal(lines.length, 1, '官方规格：DETAIL 文档恰好一行图片');
+    assert.match(lines[0], /^!\[[^\]]+\]\(preview\.svg\)$/, '必须是单图引用且 alt 非空');
+  }
+  const img = join(root, 'docs/preview.svg');
+  const svg = readFileSync(img, 'utf8');
+  assert.match(svg, /viewBox="0 0 640 300"/, '特性图规格：640×300 viewBox');
+  assert.ok(!/<text|<foreignObject|<script/i.test(svg), '特性图不得含文字/脚本/foreignObject');
+  assert.ok(statSync(img).size < 1024 * 1024, '特性图应 ≤1 MiB');
+  assert.ok(pkg.files.includes('docs'), 'files 必须包含 docs（否则发布包缺详情页资源）');
+});

@@ -40,11 +40,12 @@
 | `packages/<name>/package.json` | `name` `version` `description` `license`(MIT) `author` `repository{url,directory}` `homepage` `bugs` `engines.node`(≥22.6) `engines.dsh` `type:"module"` `main` |
 | 同上 `exports` | `.`（主入口）、`./package.json`、`./locale/*.json`；有设置页再加 `./client` |
 | 同上 `dsh` | `bundle.patch`（指向 `./cordis.patch.yml`）、`catalog{category, summary{en,zh}, capabilities[]}`；有 client 半再加 `client:{platform:'web', inject:[...]}` |
-| 同上 `files` | 必须含 `lib`、`cordis.patch.yml`、`README.md`、`CHANGELOG.md`、`LICENSE`、`icon.svg`、`locale` |
+| 同上 `files` | 必须含 `lib`、`cordis.patch.yml`、`README.md`、`CHANGELOG.md`、`LICENSE`、`icon.svg`、`locale`；**建议**再加 `docs`（plugin 面板详情页资源） |
 | `cordis.patch.yml` | `- insert: [{ id: <name>, name: <name> }]`；只插自己，别动别人段 |
 | `lib/index.js` | `export const name` / `inject`（**用到的服务必须声明**）/ `Config` / `apply`；资源注册一律 `ctx.effect(() => …)` |
 | `lib/client/settings.js` | 有设置页时：注入 `plugins.bundle.config`（key = 包名），用 `ctx.configForms.get(entryId)` |
 | `locale/{en,zh}.json` | `meta.title` + `meta.description`（**中英都要**）；详情页缺 `meta.detail` 时回退包 README |
+| `docs/DETAIL.md`（**建议项**） | 想要带图详情页时加：`meta.detail` 指 `docs/DETAIL.md`（zh 指 `docs/DETAIL.zh.md`），文档**恰好一行** `![alt](preview.svg)`，图 `640×300` 且不含文字；规格与合规判定见 [PLUGIN-SPEC-COMPLIANCE](../03-reference/PLUGIN-SPEC-COMPLIANCE.md) |
 | `icon.svg` | 矢量、≤256 KiB、含 `viewBox`；顶层 `icon` 字段优先于 `./icon` 导出 |
 | `test/package-meta.test.mjs` | 锁元信息完整性、exports 指向真实文件、files 清单、图标、locale、无 lockfile |
 | 装到 profile | 软链 + `dependencies` + `dsh.profile.bundles` **三步**，且**包目录里建 `node_modules` 软链**指向 profile（软链挂载按真实路径解析，缺了工具不注册） |
@@ -175,6 +176,27 @@
 | 白名单新增了工具，老会话里模型看不见 / 调用被拒 | 同上，外加「首步隐藏后就解绑」等于放弃热更新 | 隐藏逻辑按**名单指纹**去重：名单没变就跳过，变了才重新 `restrict` |
 
 自检问句：**「这个 agent 会比我这版代码活得久吗？」** 答案是「会」时，就必须留 disposer 且不假设安装即定稿。
+
+#### 官方规范原文（照做即可，别自己发明）
+
+`dsh-doc` → `references/practices.md` 第 8 / 19 条：
+
+> Registrations are effects owned by a context. … A registration on another context, such as `agent.ctx`,
+> **has two owners: keep its disposer in your plugin's own effect too**, so either teardown removes it.
+>
+> Wrap it in one `agent.ctx.effect()` and **also keep that disposer, keyed by agent, in your plugin's own effect**;
+> unloading the plugin does not dispose `agent.ctx` registrations by itself.
+
+翻成做法（**双属主 + 补装**）：
+
+| 步骤 | 代码形态 | 为什么 |
+|---|---|---|
+| ① 注册 | `agent.ctx.effect(() => tools.guard(fn))` 或上面这种 `tools.guard(fn)`（其返回值本身就是 agent.ctx 的 effect disposer） | 让 guard 随 agent 释放而回收 |
+| ② 留痕 | 把该 disposer 存进 `Map<agent, dispose>`，并在插件侧 `ctx.effect(() => () => disposeAll())` | 插件卸载也能撤；否则只能重启进程 |
+| ③ **补装存量** | `ctx.get('agents').list().filter(isMine).forEach(install)` | 只监听 `xxx/created` 只能覆盖**之后新建**的对象；不做补装就等于「改了必须重启」 |
+| ④ 幂等 | `if (disposed.has(agent)) return` | 补装与 created 事件会撞车，重复装会产生双份守卫 |
+
+**副作用要写进 README**：既然卸载会撤守卫，那么「卸载 whale 后 QQ 会话就恢复全量工具面」——这是规范语义（谁装的谁撤），不是 bug。
 
 ---
 

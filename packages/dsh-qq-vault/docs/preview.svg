@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="300" viewBox="0 0 640 300" role="img">
+  <title>备份按项勾选：只打包选中的配置项，导出为一个压缩包，导入时逐项预览再写回</title>
+  <!-- 左：可勾选的清单 -->
+  <g fill="none" stroke="#8A94A6" stroke-width="2.5" stroke-linejoin="round">
+    <rect x="40" y="52" width="228" height="196" rx="14" fill="#8A94A6" fill-opacity="0.08"/>
+    <path d="M40 92 h228"/>
+  </g>
+  <g fill="none" stroke="#22B07D" stroke-width="2.5" stroke-linejoin="round">
+    <rect x="62" y="112" width="20" height="20" rx="5" fill="#22B07D" fill-opacity="0.18"/>
+    <path d="M67 122 l5 6 l10 -13" stroke-linecap="round"/>
+    <rect x="62" y="152" width="20" height="20" rx="5" fill="#22B07D" fill-opacity="0.18"/>
+    <path d="M67 162 l5 6 l10 -13" stroke-linecap="round"/>
+  </g>
+  <g fill="none" stroke="#8A94A6" stroke-width="2.5" stroke-linejoin="round">
+    <rect x="62" y="192" width="20" height="20" rx="5"/>
+    <path d="M62 222 h20" stroke-dasharray="4 5"/>
+  </g>
+  <g fill="none" stroke="#8A94A6" stroke-width="2.5" stroke-linecap="round" stroke-opacity="0.75">
+    <path d="M96 122 h138 M96 162 h108 M96 202 h124 M96 226 h86"/>
+  </g>
+  <!-- 中：导出箭头 -->
+  <g fill="none" stroke="#4C8DFF" stroke-width="3" stroke-linecap="round">
+    <path d="M296 150 h64"/>
+    <path d="M344 140 l14 10 l-14 10"/>
+  </g>
+  <!-- 右：压缩包 -->
+  <g fill="none" stroke="#4C8DFF" stroke-width="3" stroke-linejoin="round">
+    <rect x="390" y="86" width="120" height="128" rx="14" fill="#4C8DFF" fill-opacity="0.12"/>
+    <path d="M390 122 h120"/>
+    <rect x="436" y="100" width="28" height="12" rx="4" fill="#4C8DFF" fill-opacity="0.25"/>
+    <path d="M444 140 h12 M444 158 h12 M444 176 h12" stroke-linecap="round" stroke-opacity="0.6"/>
+  </g>
+  <!-- 右下：逐项预览的小卡片（回写前的确认） -->
+  <g fill="none" stroke="#22B07D" stroke-width="2.5" stroke-linejoin="round">
+    <rect x="524" y="126" width="76" height="48" rx="10" fill="#22B07D" fill-opacity="0.10"/>
+    <path d="M538 146 h48 M538 160 h30" stroke-linecap="round" stroke-opacity="0.7"/>
+  </g>
+  <g fill="none" stroke="#8A94A6" stroke-width="2.5" stroke-linecap="round" stroke-opacity="0.85">
+    <path d="M510 150 h-8 M502 144 l-7 6 l7 6"/>
+  </g>
+  <!-- 底部：其余项保持原样 -->
+  <g fill="none" stroke="#8A94A6" stroke-width="2.5" stroke-linecap="round" stroke-opacity="0.5">
+    <path d="M390 240 h120"/>
+    <path d="M390 256 h72"/>
+  </g>
+</svg>

@@ -21,7 +21,8 @@ import { installAgentGuard } from './agent-guard.js';
 export { Config, DEFAULT_ALLOW, DEFAULT_CONFIG, MODES, PRESET_ID, isRestrictionActive, readConfig, wantsHide };
 
 export const name = 'dsh-qq-whale';
-export const inject = [];
+// apply 里要用 agents.list() 补装存量 agent（重载即生效的前提），声明后 Cordis 会等它就绪再跑 apply
+export const inject = ['agents'];
 
 /**
  * 插件入口：只做两件事——挂监听、打一行状态日志。
